@@ -129,6 +129,11 @@ async def chat_stream_handler(
                         try:
                             # Generate SAS URL with 24-hour expiry
                             sas_url = await blob_storage_manager.generate_sas_url(blob_name, expiry_hours=24)
+
+                            # Add page number fragment if available
+                            if source.get('page_number') is not None:
+                                sas_url += f"#page={source['page_number']}"
+
                             source['url'] = sas_url
                         except Exception as e:
                             logger.error(f"Error generating SAS URL for {blob_name}: {e}")
@@ -233,9 +238,9 @@ async def upload_document(
         # Read file content
         file_content = await file.read()
 
-        # Extract text from document
+        # Extract text from document with page mapping
         logger.info(f"Extracting text from {file.filename}")
-        text = await DocumentProcessor.extract_text(file_content, file.filename)
+        text, char_to_page = await DocumentProcessor.extract_text(file_content, file.filename)
 
         if not text.strip():
             return JSONResponse(
@@ -251,9 +256,9 @@ async def upload_document(
             metadata={"original_filename": file.filename}
         )
 
-        # Chunk text
+        # Chunk text with page number tracking
         logger.info(f"Chunking text from {file.filename}")
-        chunks = await DocumentProcessor.chunk_text(text, sentences_per_chunk=4)
+        chunks = await DocumentProcessor.chunk_text(text, char_to_page, sentences_per_chunk=4)
 
         if not chunks:
             return JSONResponse(

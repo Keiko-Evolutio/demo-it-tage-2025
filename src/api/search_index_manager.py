@@ -80,7 +80,7 @@ class SearchIndexManager:
         vector_query = VectorizedQuery(vector=embedded_question, k_nearest_neighbors=5, fields="embedding")
         response = await self._get_client().search(
             vector_queries=[vector_query],
-            select=['token', 'source_document', 'source_url', 'chunk_index'],
+            select=['token', 'source_document', 'source_url', 'chunk_index', 'page_number'],
         )
 
         results = []
@@ -92,7 +92,8 @@ class SearchIndexManager:
                 source_info = {
                     'document': result.get('source_document', ''),
                     'url': result.get('source_url', ''),
-                    'chunk_index': result.get('chunk_index', 0)
+                    'chunk_index': result.get('chunk_index', 0),
+                    'page_number': result.get('page_number', None)
                 }
                 # Avoid duplicate sources
                 if source_info not in sources:
@@ -131,14 +132,14 @@ class SearchIndexManager:
 
     async def upload_document_chunks(
         self,
-        chunks: list[str],
+        chunks: list[dict],
         source_document: str,
         source_url: str = ""
     ) -> None:
         """
         Upload document chunks with embeddings to the index.
 
-        :param chunks: List of text chunks to embed and upload
+        :param chunks: List of chunk dictionaries with 'text' and 'page_number' keys
         :param source_document: Name of the source document
         :param source_url: URL of the source document in blob storage
         """
@@ -149,7 +150,10 @@ class SearchIndexManager:
         safe_document_name = source_document.replace('.', '_').replace(' ', '_')
 
         documents = []
-        for chunk_index, chunk_text in enumerate(chunks):
+        for chunk_index, chunk_data in enumerate(chunks):
+            chunk_text = chunk_data['text']
+            page_number = chunk_data.get('page_number', None)
+
             # Generate embedding for chunk
             embedding_response = await self._embeddings_client.embed(
                 input=chunk_text,
@@ -165,7 +169,8 @@ class SearchIndexManager:
                 'embedding': embedding,
                 'source_document': source_document,
                 'source_url': source_url,
-                'chunk_index': chunk_index
+                'chunk_index': chunk_index,
+                'page_number': page_number
             }
             documents.append(doc)
 
@@ -348,6 +353,7 @@ class SearchIndexManager:
                 SimpleField(name="source_document", type=SearchFieldDataType.String, hidden=False, filterable=True),
                 SimpleField(name="source_url", type=SearchFieldDataType.String, hidden=False),
                 SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, hidden=False),
+                SimpleField(name="page_number", type=SearchFieldDataType.Int32, hidden=False, filterable=True),
             ]
             vector_search = VectorSearch(
                 profiles=[VectorSearchProfile(name="embedding_config",
