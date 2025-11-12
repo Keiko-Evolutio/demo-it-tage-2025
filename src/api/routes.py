@@ -97,6 +97,7 @@ async def chat_stream_handler(
     chat_client: ChatCompletionsClient = Depends(get_chat_client),
     model_deployment_name: str = Depends(get_chat_model),
     search_index_manager: SearchIndexManager = Depends(get_search_index_namager),
+    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
     _ = auth_dependency
 ) -> fastapi.responses.StreamingResponse:
     
@@ -116,6 +117,22 @@ async def chat_stream_handler(
         # Use RAG model, only if we were provided index and we have found a context there.
         if search_index_manager is not None:
             context, sources = await search_index_manager.search(chat_request)
+
+            # Generate SAS URLs for sources if blob storage manager is available
+            if sources and blob_storage_manager is not None:
+                for source in sources:
+                    if 'url' in source and source['url']:
+                        # Extract blob name from URL
+                        blob_name = source['url'].split('/')[-1]
+                        # Remove query parameters if any
+                        blob_name = blob_name.split('?')[0]
+                        try:
+                            # Generate SAS URL with 24-hour expiry
+                            sas_url = await blob_storage_manager.generate_sas_url(blob_name, expiry_hours=24)
+                            source['url'] = sas_url
+                        except Exception as e:
+                            logger.error(f"Error generating SAS URL for {blob_name}: {e}")
+
             if context:
                 prompt_messages = PromptTemplate.from_string(
                     'You are a helpful assistant that answers some questions '

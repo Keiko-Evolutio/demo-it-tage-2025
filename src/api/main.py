@@ -100,11 +100,13 @@ async def lifespan(app: fastapi.FastAPI):
     # Initialize blob storage manager if endpoint is available
     blob_storage_manager = None
     blob_endpoint = os.environ.get('AZURE_STORAGE_BLOB_ENDPOINT')
-    if blob_endpoint:
+    storage_account_name = os.environ.get('AZURE_STORAGE_ACCOUNT_NAME')
+    if blob_endpoint and storage_account_name:
         blob_storage_manager = BlobStorageManager(
             blob_endpoint=blob_endpoint,
             credential=azure_credential,
-            container_name='documents'
+            container_name='documents',
+            storage_account_name=storage_account_name
         )
         # Ensure container exists
         await blob_storage_manager.ensure_container_exists()

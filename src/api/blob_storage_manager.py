@@ -6,10 +6,11 @@
 
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
+from azure.storage.blob import BlobSasPermissions, generate_blob_sas
 from azure.core.exceptions import ResourceExistsError
 
 from .util import get_logger
@@ -34,12 +35,14 @@ class BlobStorageManager:
         self,
         blob_endpoint: str,
         credential: AsyncTokenCredential,
-        container_name: str = 'documents'
+        container_name: str = 'documents',
+        storage_account_name: Optional[str] = None
     ) -> None:
         """Initialize blob storage manager."""
         self._blob_endpoint = blob_endpoint
         self._credential = credential
         self._container_name = container_name
+        self._storage_account_name = storage_account_name
         self._blob_service_client: Optional[BlobServiceClient] = None
         self._container_client: Optional[ContainerClient] = None
     
@@ -130,7 +133,7 @@ class BlobStorageManager:
     async def list_documents(self) -> list:
         """
         List all documents in the container.
-        
+
         :return: List of blob names
         """
         try:
@@ -147,7 +150,50 @@ class BlobStorageManager:
         except Exception as e:
             logger.error(f"Error listing documents from blob storage: {e}")
             raise
-    
+
+    async def generate_sas_url(
+        self,
+        blob_name: str,
+        expiry_hours: int = 1
+    ) -> str:
+        """
+        Generate a SAS URL for a blob with read permissions.
+
+        :param blob_name: Name of the blob
+        :param expiry_hours: Number of hours until the SAS token expires (default: 1)
+        :return: Blob URL with SAS token
+        """
+        try:
+            # Get account key from blob service client
+            blob_service_client = await self._get_blob_service_client()
+
+            # For managed identity, we need to use user delegation key
+            # Get user delegation key
+            delegation_key = await blob_service_client.get_user_delegation_key(
+                key_start_time=datetime.utcnow(),
+                key_expiry_time=datetime.utcnow() + timedelta(hours=expiry_hours)
+            )
+
+            # Generate SAS token using user delegation key
+            from azure.storage.blob import generate_blob_sas, UserDelegationKey
+
+            sas_token = generate_blob_sas(
+                account_name=self._storage_account_name,
+                container_name=self._container_name,
+                blob_name=blob_name,
+                user_delegation_key=delegation_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=datetime.utcnow() + timedelta(hours=expiry_hours)
+            )
+
+            # Construct full URL with SAS token
+            blob_url = f"{self._blob_endpoint}{self._container_name}/{blob_name}?{sas_token}"
+
+            return blob_url
+        except Exception as e:
+            logger.error(f"Error generating SAS URL for blob {blob_name}: {e}")
+            raise
+
     async def close(self) -> None:
         """Close blob service client."""
         if self._blob_service_client:
