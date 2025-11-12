@@ -30,13 +30,9 @@ const useStyles = makeStyles({
     textAlign: "center" as const,
     cursor: "pointer",
     transition: "all 0.2s ease",
-    "&:hover": {
-      borderColor: tokens.colorBrandStroke1,
-      backgroundColor: tokens.colorNeutralBackground1Hover,
-    },
   },
   uploadAreaActive: {
-    borderColor: tokens.colorBrandStroke1,
+    border: `2px dashed ${tokens.colorBrandStroke1}`,
     backgroundColor: tokens.colorNeutralBackground1Selected,
   },
   fileInput: {
