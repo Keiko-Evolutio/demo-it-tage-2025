@@ -80,7 +80,7 @@ class SearchIndexManager:
         vector_query = VectorizedQuery(vector=embedded_question, k_nearest_neighbors=5, fields="embedding")
         response = await self._get_client().search(
             vector_queries=[vector_query],
-            select=['token', 'source_document', 'source_url', 'chunk_index', 'page_number'],
+            select=['token', 'source_document', 'source_url', 'chunk_index', 'pageNumber'],
         )
 
         results = []
@@ -93,7 +93,7 @@ class SearchIndexManager:
                     'document': result.get('source_document', ''),
                     'url': result.get('source_url', ''),
                     'chunk_index': result.get('chunk_index', 0),
-                    'page_number': result.get('page_number', None)
+                    'page_number': result.get('pageNumber', None)
                 }
                 # Avoid duplicate sources
                 if source_info not in sources:
@@ -170,7 +170,7 @@ class SearchIndexManager:
                 'source_document': source_document,
                 'source_url': source_url,
                 'chunk_index': chunk_index,
-                'page_number': page_number
+                'pageNumber': page_number
             }
             documents.append(doc)
 
@@ -353,7 +353,7 @@ class SearchIndexManager:
                 SimpleField(name="source_document", type=SearchFieldDataType.String, hidden=False, filterable=True),
                 SimpleField(name="source_url", type=SearchFieldDataType.String, hidden=False),
                 SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, hidden=False),
-                SimpleField(name="page_number", type=SearchFieldDataType.Int32, hidden=False, filterable=True),
+                SimpleField(name="pageNumber", type=SearchFieldDataType.Int32, hidden=False, filterable=True),
             ]
             vector_search = VectorSearch(
                 profiles=[VectorSearchProfile(name="embedding_config",
