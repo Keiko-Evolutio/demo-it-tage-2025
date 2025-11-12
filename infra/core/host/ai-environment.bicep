@@ -32,6 +32,9 @@ module storageAccount '../storage/storage-account.bicep' = {
       {
         name: 'default'
       }
+      {
+        name: 'documents'
+      }
     ]
     files: [
       {
@@ -150,3 +153,7 @@ output searchServiceName string = !empty(searchServiceName) ? searchService!.out
 output searchServiceEndpoint string = !empty(searchServiceName) ? searchService!.outputs.endpoint : ''
 
 output projectResourceId string = cognitiveServices.outputs.projectResourceId
+
+output storageAccountId string = storageAccount.outputs.id
+output storageAccountName string = storageAccount.outputs.name
+output storageAccountBlobEndpoint string = storageAccount.outputs.primaryEndpoints.blob
