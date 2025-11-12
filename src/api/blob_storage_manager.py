@@ -175,7 +175,7 @@ class BlobStorageManager:
             )
 
             # Generate SAS token using user delegation key
-            from azure.storage.blob import generate_blob_sas, UserDelegationKey
+            from azure.storage.blob import generate_blob_sas, UserDelegationKey, ContentSettings
 
             sas_token = generate_blob_sas(
                 account_name=self._storage_account_name,
@@ -183,7 +183,8 @@ class BlobStorageManager:
                 blob_name=blob_name,
                 user_delegation_key=delegation_key,
                 permission=BlobSasPermissions(read=True),
-                expiry=datetime.utcnow() + timedelta(hours=expiry_hours)
+                expiry=datetime.utcnow() + timedelta(hours=expiry_hours),
+                content_disposition='inline'  # Display in browser instead of download
             )
 
             # Construct full URL with SAS token
