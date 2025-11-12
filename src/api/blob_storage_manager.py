@@ -177,6 +177,14 @@ class BlobStorageManager:
             # Generate SAS token using user delegation key
             from azure.storage.blob import generate_blob_sas, UserDelegationKey, ContentSettings
 
+            # Extract original filename from blob_name (remove timestamp prefix)
+            # Format: 20251112_103403_Azure-AI-Foundry...pdf
+            original_filename = blob_name
+            if '_' in blob_name:
+                parts = blob_name.split('_', 2)
+                if len(parts) >= 3:
+                    original_filename = parts[2]
+
             sas_token = generate_blob_sas(
                 account_name=self._storage_account_name,
                 container_name=self._container_name,
@@ -184,7 +192,8 @@ class BlobStorageManager:
                 user_delegation_key=delegation_key,
                 permission=BlobSasPermissions(read=True),
                 expiry=datetime.utcnow() + timedelta(hours=expiry_hours),
-                content_disposition='inline'  # Display in browser instead of download
+                content_disposition=f'inline; filename="{original_filename}"',  # Display in browser with filename
+                content_type='application/pdf'  # Set correct MIME type for PDF
             )
 
             # Construct full URL with SAS token
