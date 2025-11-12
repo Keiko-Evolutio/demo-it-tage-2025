@@ -134,9 +134,6 @@ module searchService '../search/search-services.bicep' =
 
 
 // Outputs
-output storageAccountId string = storageAccount.outputs.id
-output storageAccountName string = storageAccount.outputs.name
-
 output applicationInsightsId string = !empty(applicationInsightsName) && !empty(logAnalyticsName) ? applicationInsights!.outputs.id : ''
 output applicationInsightsName string = !empty(applicationInsightsName) && !empty(logAnalyticsName) ? applicationInsights!.outputs.name : ''
 output logAnalyticsWorkspaceId string = !empty(logAnalyticsName) ? logAnalytics!.outputs.id : ''
