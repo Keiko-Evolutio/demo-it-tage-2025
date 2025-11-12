@@ -126,7 +126,7 @@ dmypy.json
 cython_debug/
 
 # IDEs and editors
-.idea/ # Uncomment if you want to ignore PyCharm settings
+.idea/
 .vscode/
 
 # Infrastructure and Deployment

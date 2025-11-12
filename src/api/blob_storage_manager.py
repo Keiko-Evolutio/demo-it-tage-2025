@@ -5,6 +5,7 @@
 """Blob storage manager for document uploads."""
 
 import logging
+import re
 from typing import Optional
 from datetime import datetime, timedelta
 
@@ -45,6 +46,34 @@ class BlobStorageManager:
         self._storage_account_name = storage_account_name
         self._blob_service_client: Optional[BlobServiceClient] = None
         self._container_client: Optional[ContainerClient] = None
+
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        """
+        Sanitize a filename to be ASCII-compatible for content-disposition header.
+
+        Replaces German umlauts and special characters with ASCII equivalents.
+        This is needed because the content-disposition header in SAS tokens
+        must use ASCII-compatible characters to avoid signature mismatches.
+
+        :param filename: The filename to sanitize
+        :return: Sanitized filename
+        """
+        # Replace German umlauts and special characters
+        replacements = {
+            'ä': 'ae', 'ö': 'oe', 'ü': 'ue',
+            'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue',
+            'ß': 'ss'
+        }
+
+        result = filename
+        for old, new in replacements.items():
+            result = result.replace(old, new)
+
+        # Replace any remaining non-ASCII characters with underscore
+        result = re.sub(r'[^\x00-\x7F]+', '_', result)
+
+        return result
     
     async def _get_blob_service_client(self) -> BlobServiceClient:
         """Get or create blob service client."""
@@ -86,30 +115,34 @@ class BlobStorageManager:
     ) -> str:
         """
         Upload document to blob storage.
-        
+
         :param filename: Name of the file
         :param file_content: Binary content of the file
         :param metadata: Optional metadata to attach to the blob
         :return: Blob URL
         """
         try:
+            # Sanitize filename to avoid issues with SAS token generation
+            # The blob name must be ASCII-compatible to avoid signature mismatches
+            sanitized_filename = self._sanitize_filename(filename)
+
             # Generate unique blob name with timestamp
             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            blob_name = f"{timestamp}_{filename}"
-            
+            blob_name = f"{timestamp}_{sanitized_filename}"
+
             container_client = await self._get_container_client()
             blob_client = container_client.get_blob_client(blob_name)
-            
+
             # Upload blob
             await blob_client.upload_blob(
                 file_content,
                 overwrite=True,
                 metadata=metadata or {}
             )
-            
+
             blob_url = blob_client.url
             logger.info(f"Uploaded document to blob storage: {blob_name}")
-            
+
             return blob_url
         except Exception as e:
             logger.error(f"Error uploading document to blob storage: {e}")
@@ -185,6 +218,10 @@ class BlobStorageManager:
                 if len(parts) >= 3:
                     original_filename = parts[2]
 
+            # Sanitize filename for content-disposition header to avoid SAS signature issues
+            # The content-disposition header must use ASCII-compatible characters
+            sanitized_filename = self._sanitize_filename(original_filename)
+
             sas_token = generate_blob_sas(
                 account_name=self._storage_account_name,
                 container_name=self._container_name,
@@ -192,7 +229,7 @@ class BlobStorageManager:
                 user_delegation_key=delegation_key,
                 permission=BlobSasPermissions(read=True),
                 expiry=datetime.utcnow() + timedelta(hours=expiry_hours),
-                content_disposition=f'inline; filename="{original_filename}"',  # Display in browser with filename
+                content_disposition=f'inline; filename="{sanitized_filename}"',  # Display in browser with sanitized filename
                 content_type='application/pdf'  # Set correct MIME type for PDF
             )
 

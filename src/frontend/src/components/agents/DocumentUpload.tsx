@@ -8,12 +8,21 @@ import {
   tokens,
   Body1,
   Caption1,
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent,
 } from "@fluentui/react-components";
 import {
   ArrowUploadRegular,
   DocumentRegular,
   CheckmarkCircleRegular,
   DismissCircleRegular,
+  DeleteRegular,
 } from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
@@ -68,6 +77,14 @@ const useStyles = makeStyles({
   uploadingIcon: {
     color: tokens.colorBrandForeground1,
   },
+  clearButton: {
+    marginTop: tokens.spacingVerticalM,
+  },
+  buttonContainer: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: tokens.spacingHorizontalS,
+  },
 });
 
 interface UploadedDocument {
@@ -85,6 +102,8 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const styles = useStyles();
   const [isDragging, setIsDragging] = useState(false);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -179,6 +198,31 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
     }
   };
 
+  const handleClearAll = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/delete-all-chunks", {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Clear the documents list
+        setDocuments([]);
+        setIsDialogOpen(false);
+        onUploadComplete?.();
+        alert(`Successfully deleted ${result.deleted_count} chunks from the database.`);
+      } else {
+        alert(`Error: ${result.error || "Failed to delete chunks"}`);
+      }
+    } catch (error) {
+      alert("Network error: Failed to delete chunks");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const getStatusIcon = (status: UploadedDocument["status"]) => {
     switch (status) {
       case "uploading":
@@ -212,6 +256,41 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
           accept=".pdf,.docx,.txt,.md"
           multiple
         />
+      </div>
+
+      <div className={styles.buttonContainer}>
+        <Dialog open={isDialogOpen} onOpenChange={(_, data) => setIsDialogOpen(data.open)}>
+          <DialogTrigger disableButtonEnhancement>
+            <Button
+              appearance="secondary"
+              icon={<DeleteRegular />}
+              disabled={isDeleting}
+            >
+              Clear All Documents
+            </Button>
+          </DialogTrigger>
+          <DialogSurface>
+            <DialogBody>
+              <DialogTitle>Clear All Documents</DialogTitle>
+              <DialogContent>
+                Are you sure you want to delete all document chunks from the database?
+                This action cannot be undone.
+              </DialogContent>
+              <DialogActions>
+                <DialogTrigger disableButtonEnhancement>
+                  <Button appearance="secondary">Cancel</Button>
+                </DialogTrigger>
+                <Button
+                  appearance="primary"
+                  onClick={handleClearAll}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete All"}
+                </Button>
+              </DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
       </div>
 
       {documents.length > 0 && (

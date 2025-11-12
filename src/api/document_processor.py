@@ -170,7 +170,21 @@ class DocumentProcessor:
                 if chunk_text.strip():
                     # Find the page number for this chunk (use the first character's page)
                     chunk_start_pos = text.find(chunk_text, current_pos)
-                    page_number = char_to_page.get(chunk_start_pos, None)
+
+                    # Find the page number by looking for the nearest mapped position
+                    # This handles cases where chunk_start_pos falls on a separator
+                    page_number = None
+                    if char_to_page:
+                        # Try exact position first
+                        if chunk_start_pos in char_to_page:
+                            page_number = char_to_page[chunk_start_pos]
+                        else:
+                            # Find the next available position in the mapping
+                            for offset in range(10):  # Look ahead up to 10 characters
+                                test_pos = chunk_start_pos + offset
+                                if test_pos in char_to_page:
+                                    page_number = char_to_page[test_pos]
+                                    break
 
                     chunks.append({
                         'text': chunk_text,

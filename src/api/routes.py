@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from typing import Dict
+from urllib.parse import quote
 
 import fastapi
 from fastapi import Request, Depends, UploadFile, File
@@ -70,7 +71,7 @@ def get_chat_model(request: Request) -> str:
     return request.app.state.chat_model
 
 
-def get_search_index_namager(request: Request) -> SearchIndexManager:
+def get_search_index_manager(request: Request) -> SearchIndexManager:
     return request.app.state.search_index_manager
 
 
@@ -96,7 +97,7 @@ async def chat_stream_handler(
     chat_request: ChatRequest,
     chat_client: ChatCompletionsClient = Depends(get_chat_client),
     model_deployment_name: str = Depends(get_chat_model),
-    search_index_manager: SearchIndexManager = Depends(get_search_index_namager),
+    search_index_manager: SearchIndexManager = Depends(get_search_index_manager),
     blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
     _ = auth_dependency
 ) -> fastapi.responses.StreamingResponse:
@@ -206,7 +207,7 @@ async def chat_stream_handler(
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    search_index_manager: SearchIndexManager = Depends(get_search_index_namager),
+    search_index_manager: SearchIndexManager = Depends(get_search_index_manager),
     blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
     _ = auth_dependency
 ) -> JSONResponse:
@@ -250,10 +251,12 @@ async def upload_document(
 
         # Upload to blob storage
         logger.info(f"Uploading {file.filename} to blob storage")
+        # URL-encode filename for metadata to avoid invalid characters
+        encoded_filename = quote(file.filename, safe='')
         blob_url = await blob_storage_manager.upload_document(
             filename=file.filename,
             file_content=file_content,
-            metadata={"original_filename": file.filename}
+            metadata={"original_filename": encoded_filename}
         )
 
         # Chunk text with page number tracking
@@ -297,4 +300,40 @@ async def upload_document(
         return JSONResponse(
             status_code=500,
             content={"error": f"Failed to process document: {str(e)}"}
+        )
+
+
+@router.delete("/delete-all-chunks", dependencies=[Depends(authenticate)])
+async def delete_all_chunks(
+    search_index_manager: SearchIndexManager = Depends(get_search_index_manager)
+):
+    """
+    Delete all chunks from the search index.
+
+    This endpoint removes all indexed document chunks from the Azure AI Search index.
+    Use with caution as this operation cannot be undone.
+
+    :return: JSON response with the number of chunks deleted
+    """
+    try:
+        logger.info("Deleting all chunks from search index")
+
+        # Delete all chunks
+        deleted_count = await search_index_manager.delete_all_chunks()
+
+        logger.info(f"Successfully deleted {deleted_count} chunks from search index")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "All chunks deleted successfully",
+                "deleted_count": deleted_count
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error deleting all chunks: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to delete chunks: {str(e)}"}
         )

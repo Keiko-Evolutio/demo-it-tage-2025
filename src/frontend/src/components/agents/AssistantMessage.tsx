@@ -49,7 +49,7 @@ export function AssistantMessage({
     ? Object.values(groupedAnnotations).map((group: any, index: number) => {
         const hasUrl = group.url && group.url.trim() !== '';
         // Remove duplicate page numbers and sort them
-        const uniquePages = [...new Set(group.pages)].sort((a, b) => a - b);
+        const uniquePages = [...new Set<number>(group.pages)].sort((a, b) => a - b);
         const pagesText = uniquePages.length > 0 ? uniquePages.join(', ') : 'N/A';
 
         return (
