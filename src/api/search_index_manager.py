@@ -64,12 +64,12 @@ class SearchIndexManager:
                 endpoint=self._endpoint, index_name=self._index.name, credential=self._credential)
         return self._client
 
-    async def search(self, message: ChatRequest) -> str:
+    async def search(self, message: ChatRequest) -> tuple[str, list[dict]]:
         """
         Search the message in the vector store.
 
         :param message: The customer question.
-        :return: The context for the question.
+        :return: Tuple of (context string, list of source metadata)
         """
         self._raise_if_no_index()
         embedded_question = (await self._embeddings_client.embed(
@@ -80,10 +80,26 @@ class SearchIndexManager:
         vector_query = VectorizedQuery(vector=embedded_question, k_nearest_neighbors=5, fields="embedding")
         response = await self._get_client().search(
             vector_queries=[vector_query],
-            select=['token'],
+            select=['token', 'source_document', 'source_url', 'chunk_index'],
         )
-        results = [result['token'] async for result in response]
-        return "\n------\n".join(results)
+
+        results = []
+        sources = []
+        async for result in response:
+            results.append(result['token'])
+            # Collect source metadata
+            if 'source_document' in result and result['source_document']:
+                source_info = {
+                    'document': result.get('source_document', ''),
+                    'url': result.get('source_url', ''),
+                    'chunk_index': result.get('chunk_index', 0)
+                }
+                # Avoid duplicate sources
+                if source_info not in sources:
+                    sources.append(source_info)
+
+        context = "\n------\n".join(results)
+        return context, sources
     
     async def upload_documents(self, embeddings_file: str) -> None:
         """
@@ -97,14 +113,59 @@ class SearchIndexManager:
         with open(embeddings_file, newline='') as fp:
             reader = csv.DictReader(fp)
             for row in reader:
-                documents.append(
-                    {
-                        'embedId': str(index),
-                        'token': row['token'],
-                        'embedding': json.loads(row['embedding'])
-                    }
-                )
+                doc = {
+                    'embedId': str(index),
+                    'token': row['token'],
+                    'embedding': json.loads(row['embedding'])
+                }
+                # Add optional metadata fields if present
+                if 'source_document' in row:
+                    doc['source_document'] = row['source_document']
+                if 'source_url' in row:
+                    doc['source_url'] = row['source_url']
+                if 'chunk_index' in row:
+                    doc['chunk_index'] = int(row['chunk_index'])
+                documents.append(doc)
                 index += 1
+        await self._get_client().upload_documents(documents)
+
+    async def upload_document_chunks(
+        self,
+        chunks: list[str],
+        source_document: str,
+        source_url: str = ""
+    ) -> None:
+        """
+        Upload document chunks with embeddings to the index.
+
+        :param chunks: List of text chunks to embed and upload
+        :param source_document: Name of the source document
+        :param source_url: URL of the source document in blob storage
+        """
+        self._raise_if_no_index()
+
+        documents = []
+        for chunk_index, chunk_text in enumerate(chunks):
+            # Generate embedding for chunk
+            embedding_response = await self._embeddings_client.embed(
+                input=chunk_text,
+                dimensions=self._dimensions,
+                model=self._model
+            )
+            embedding = embedding_response['data'][0]['embedding']
+
+            # Create document with metadata
+            doc = {
+                'embedId': f"{source_document}_{chunk_index}",
+                'token': chunk_text,
+                'embedding': embedding,
+                'source_document': source_document,
+                'source_url': source_url,
+                'chunk_index': chunk_index
+            }
+            documents.append(doc)
+
+        # Upload all chunks at once
         await self._get_client().upload_documents(documents)
 
     async def is_index_empty(self) -> bool:
@@ -280,6 +341,9 @@ class SearchIndexManager:
                     vector_search_profile_name="embedding_config"
                 ),
                 SimpleField(name="token", type=SearchFieldDataType.String, hidden=False),
+                SimpleField(name="source_document", type=SearchFieldDataType.String, hidden=False, filterable=True),
+                SimpleField(name="source_url", type=SearchFieldDataType.String, hidden=False),
+                SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, hidden=False),
             ]
             vector_search = VectorSearch(
                 profiles=[VectorSearchProfile(name="embedding_config",

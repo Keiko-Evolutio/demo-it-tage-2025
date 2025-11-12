@@ -7,14 +7,16 @@ import os
 from typing import Dict
 
 import fastapi
-from fastapi import Request, Depends
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import Request, Depends, UploadFile, File
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from azure.ai.inference.prompts import PromptTemplate
 from azure.ai.inference.aio import ChatCompletionsClient
 
 from .util import get_logger, ChatRequest
 from .search_index_manager import SearchIndexManager
+from .blob_storage_manager import BlobStorageManager
+from .document_processor import DocumentProcessor
 from azure.core.exceptions import HttpResponseError
 
 
@@ -71,6 +73,11 @@ def get_chat_model(request: Request) -> str:
 def get_search_index_namager(request: Request) -> SearchIndexManager:
     return request.app.state.search_index_manager
 
+
+def get_blob_storage_manager(request: Request) -> BlobStorageManager:
+    return request.app.state.blob_storage_manager
+
+
 def serialize_sse_event(data: Dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
@@ -105,9 +112,10 @@ async def chat_stream_handler(
         messages = [{"role": message.role, "content": message.content} for message in chat_request.messages]
 
         prompt_messages = PromptTemplate.from_string('You are a helpful assistant').create_messages()
+        sources = []
         # Use RAG model, only if we were provided index and we have found a context there.
         if search_index_manager is not None:
-            context = await search_index_manager.search(chat_request)
+            context, sources = await search_index_manager.search(chat_request)
             if context:
                 prompt_messages = PromptTemplate.from_string(
                     'You are a helpful assistant that answers some questions '
@@ -133,10 +141,12 @@ async def chat_stream_handler(
                                     }
                                 )
 
+            # Send completed message with sources
             yield serialize_sse_event({
                 "content": accumulated_message,
                 "type": "completed_message",
-            })                        
+                "sources": sources
+            })
         except BaseException as e:
             error_processed = False
             response = "There is an error!"
@@ -169,3 +179,100 @@ async def chat_stream_handler(
             })
 
     return StreamingResponse(response_stream(), headers=headers)
+
+
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    search_index_manager: SearchIndexManager = Depends(get_search_index_namager),
+    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
+    _ = auth_dependency
+) -> JSONResponse:
+    """
+    Upload and process a document for RAG.
+
+    Steps:
+    1. Validate file format
+    2. Extract text from document
+    3. Upload to blob storage
+    4. Chunk text
+    5. Generate embeddings and index
+    """
+    try:
+        # Check if RAG is enabled
+        if search_index_manager is None or blob_storage_manager is None:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "RAG functionality is not enabled"}
+            )
+
+        # Validate file format
+        if not DocumentProcessor.is_supported(file.filename):
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Unsupported file format. Supported: {', '.join(DocumentProcessor.SUPPORTED_EXTENSIONS)}"}
+            )
+
+        # Read file content
+        file_content = await file.read()
+
+        # Extract text from document
+        logger.info(f"Extracting text from {file.filename}")
+        text = await DocumentProcessor.extract_text(file_content, file.filename)
+
+        if not text.strip():
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No text could be extracted from the document"}
+            )
+
+        # Upload to blob storage
+        logger.info(f"Uploading {file.filename} to blob storage")
+        blob_url = await blob_storage_manager.upload_document(
+            filename=file.filename,
+            file_content=file_content,
+            metadata={"original_filename": file.filename}
+        )
+
+        # Chunk text
+        logger.info(f"Chunking text from {file.filename}")
+        chunks = await DocumentProcessor.chunk_text(text, sentences_per_chunk=4)
+
+        if not chunks:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No chunks could be created from the document"}
+            )
+
+        # Upload chunks to search index
+        logger.info(f"Indexing {len(chunks)} chunks from {file.filename}")
+        await search_index_manager.upload_document_chunks(
+            chunks=chunks,
+            source_document=file.filename,
+            source_url=blob_url
+        )
+
+        logger.info(f"Successfully processed {file.filename}")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Document uploaded and indexed successfully",
+                "filename": file.filename,
+                "chunks_count": len(chunks),
+                "blob_url": blob_url
+            }
+        )
+
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e)}
+        )
+    except Exception as e:
+        logger.error(f"Error processing document: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to process document: {str(e)}"}
+        )
