@@ -11,6 +11,7 @@ import { AgentIcon } from "./AgentIcon";
 import { SettingsPanel } from "../core/SettingsPanel";
 import { AgentPreviewChatBot } from "./AgentPreviewChatBot";
 import { MenuButton } from "../core/MenuButton/MenuButton";
+import { DocumentUpload } from "./DocumentUpload";
 import { IChatItem } from "./chatbot/types";
 
 import styles from "./AgentPreview.module.css";
@@ -44,6 +45,7 @@ interface IAgentPreviewProps {
 
 export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+  const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
   const [messageList, setMessageList] = useState<IChatItem[]>([]);
   const [isResponding, setIsResponding] = useState(false);
 
@@ -224,6 +226,17 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
                   accumulatedContent
                 );
 
+                // Process sources if available
+                if (data.sources && data.sources.length > 0) {
+                  chatItem.annotations = data.sources.map((source: any) => ({
+                    text: source.document,
+                    file_name: source.document,
+                    url: source.url,
+                    chunk_index: source.chunk_index,
+                  }));
+                  console.log("[ChatClient] Added sources:", chatItem.annotations);
+                }
+
                 setIsResponding(false);
               } else {
                 accumulatedContent += data.content;
@@ -293,6 +306,13 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
     }
   };
   const menuItems = [
+    {
+      key: "upload",
+      children: "Upload Documents",
+      onClick: () => {
+        setIsUploadPanelOpen(true);
+      },
+    },
     {
       key: "settings",
       children: "Settings",
@@ -405,6 +425,17 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
         isOpen={isSettingsPanelOpen}
         onOpenChange={handleSettingsPanelOpenChange}
       />
+
+      {/* Upload Panel */}
+      <SettingsPanel
+        isOpen={isUploadPanelOpen}
+        onOpenChange={setIsUploadPanelOpen}
+        title="Upload Documents"
+      >
+        <DocumentUpload onUploadComplete={() => {
+          console.log("Document uploaded successfully");
+        }} />
+      </SettingsPanel>
     </div>
   );
 }

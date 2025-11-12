@@ -26,11 +26,22 @@ export function AssistantMessage({
 }: IAssistantMessageProps): React.JSX.Element {
   const hasAnnotations = message.annotations && message.annotations.length > 0;
   const references = hasAnnotations
-    ? message.annotations?.map((annotation, index) => (
-        <div key={index} className="reference-item">
-          {annotation.text || annotation.file_name}
-        </div>
-      ))
+    ? message.annotations?.map((annotation, index) => {
+        const displayText = annotation.text || annotation.file_name || `Source ${index + 1}`;
+        const hasUrl = annotation.url && annotation.url.trim() !== '';
+
+        return (
+          <div key={index} className="reference-item">
+            {hasUrl ? (
+              <a href={annotation.url} target="_blank" rel="noopener noreferrer">
+                {displayText}
+              </a>
+            ) : (
+              displayText
+            )}
+          </div>
+        );
+      })
     : [];
 
   return (
