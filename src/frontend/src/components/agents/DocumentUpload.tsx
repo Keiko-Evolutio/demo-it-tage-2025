@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Button,
   Card,
   CardHeader,
   Text,
@@ -28,7 +27,7 @@ const useStyles = makeStyles({
     border: `2px dashed ${tokens.colorNeutralStroke1}`,
     borderRadius: tokens.borderRadiusMedium,
     padding: tokens.spacingVerticalXXL,
-    textAlign: "center",
+    textAlign: "center" as const,
     cursor: "pointer",
     transition: "all 0.2s ease",
     "&:hover": {
@@ -90,7 +89,6 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
   const styles = useStyles();
   const [isDragging, setIsDragging] = useState(false);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -128,7 +126,6 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       status: "uploading",
     };
     setDocuments((prev) => [...prev, newDoc]);
-    setIsUploading(true);
 
     try {
       const formData = new FormData();
@@ -183,8 +180,6 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
             : doc
         )
       );
-    } finally {
-      setIsUploading(false);
     }
   };
 

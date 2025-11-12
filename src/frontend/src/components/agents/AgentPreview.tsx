@@ -9,6 +9,7 @@ import { ChatRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 
 import { AgentIcon } from "./AgentIcon";
 import { SettingsPanel } from "../core/SettingsPanel";
+import { UploadPanel } from "../core/UploadPanel";
 import { AgentPreviewChatBot } from "./AgentPreviewChatBot";
 import { MenuButton } from "../core/MenuButton/MenuButton";
 import { DocumentUpload } from "./DocumentUpload";
@@ -427,7 +428,7 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
       />
 
       {/* Upload Panel */}
-      <SettingsPanel
+      <UploadPanel
         isOpen={isUploadPanelOpen}
         onOpenChange={setIsUploadPanelOpen}
         title="Upload Documents"
@@ -435,7 +436,7 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
         <DocumentUpload onUploadComplete={() => {
           console.log("Document uploaded successfully");
         }} />
-      </SettingsPanel>
+      </UploadPanel>
     </div>
   );
 }
