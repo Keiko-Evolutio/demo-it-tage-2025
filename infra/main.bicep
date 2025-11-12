@@ -401,7 +401,7 @@ module backendRoleAzureAIDeveloperRG 'core/security/role.bicep' = {
   }
 }
 
-module backendRoleStorageBlobDataContributorRG 'core/security/role.bicep' = if (!empty(resolvedStorageAccountName)) {
+module backendRoleStorageBlobDataContributorRG 'core/security/role.bicep' = if (empty(azureExistingAIProjectResourceId)) {
   name: 'backend-role-storage-blob-data-contributor-rg'
   scope: rg
   params: {
