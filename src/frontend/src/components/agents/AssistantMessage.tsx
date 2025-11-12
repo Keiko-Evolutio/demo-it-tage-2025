@@ -25,20 +25,47 @@ export function AssistantMessage({
   onDelete,
 }: IAssistantMessageProps): React.JSX.Element {
   const hasAnnotations = message.annotations && message.annotations.length > 0;
+
+  // Group annotations by document
+  const groupedAnnotations = hasAnnotations
+    ? message.annotations?.reduce((acc: any, annotation: any) => {
+        const docName = annotation.file_name || annotation.text || 'Unknown Document';
+        if (!acc[docName]) {
+          acc[docName] = {
+            document: docName,
+            url: annotation.url,
+            pages: []
+          };
+        }
+        // Add page number if available and not null
+        if (annotation.page_number !== null && annotation.page_number !== undefined) {
+          acc[docName].pages.push(annotation.page_number);
+        }
+        return acc;
+      }, {})
+    : {};
+
   const references = hasAnnotations
-    ? message.annotations?.map((annotation, index) => {
-        const displayText = annotation.text || annotation.file_name || `Source ${index + 1}`;
-        const hasUrl = annotation.url && annotation.url.trim() !== '';
+    ? Object.values(groupedAnnotations).map((group: any, index: number) => {
+        const hasUrl = group.url && group.url.trim() !== '';
+        // Remove duplicate page numbers and sort them
+        const uniquePages = [...new Set(group.pages)].sort((a, b) => a - b);
+        const pagesText = uniquePages.length > 0 ? uniquePages.join(', ') : 'N/A';
 
         return (
-          <div key={index} className="reference-item">
-            {hasUrl ? (
-              <a href={annotation.url} target="_blank" rel="noopener noreferrer">
-                {displayText}
-              </a>
-            ) : (
-              displayText
-            )}
+          <div key={index} className="reference-item" style={{ marginBottom: '8px' }}>
+            <div><strong>Dokument:</strong> {group.document}</div>
+            <div><strong>Seite der Quelle:</strong> {pagesText}</div>
+            <div>
+              <strong>Link:</strong>{' '}
+              {hasUrl ? (
+                <a href={group.url} target="_blank" rel="noopener noreferrer">
+                  Link zur Quelle
+                </a>
+              ) : (
+                'N/A'
+              )}
+            </div>
           </div>
         );
       })

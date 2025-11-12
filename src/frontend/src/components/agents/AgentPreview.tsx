@@ -234,6 +234,7 @@ export function AgentPreview({ agentDetails }: IAgentPreviewProps): ReactNode {
                     file_name: source.document,
                     url: source.url,
                     chunk_index: source.chunk_index,
+                    page_number: source.page_number,
                   }));
                   console.log("[ChatClient] Added sources:", chatItem.annotations);
                 }
