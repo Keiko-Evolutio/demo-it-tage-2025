@@ -144,6 +144,10 @@ class SearchIndexManager:
         """
         self._raise_if_no_index()
 
+        # Sanitize document name for use in embedId (Azure AI Search key requirements)
+        # Keys can only contain letters, digits, underscore (_), dash (-), or equal sign (=)
+        safe_document_name = source_document.replace('.', '_').replace(' ', '_')
+
         documents = []
         for chunk_index, chunk_text in enumerate(chunks):
             # Generate embedding for chunk
@@ -156,7 +160,7 @@ class SearchIndexManager:
 
             # Create document with metadata
             doc = {
-                'embedId': f"{source_document}_{chunk_index}",
+                'embedId': f"{safe_document_name}_{chunk_index}",
                 'token': chunk_text,
                 'embedding': embedding,
                 'source_document': source_document,
