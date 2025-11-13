@@ -25,12 +25,17 @@ export function AgentIcon({
   iconClassName,
   alt = "",
 }: IAgentIconProps): ReactNode {
+  // Check if iconName is a full URL (imported asset) or a filename
+  // Imported assets from Vite will start with "/" or "data:" or "http"
+  const isFullUrl = iconName?.startsWith('/') || iconName?.startsWith('data:') || iconName?.startsWith('http');
+  const iconSrc = isFullUrl ? iconName : `static/assets/template-images/${iconName}`;
+
   return (
     <div className={styles.iconContainer}>
       <img
         alt={alt}
         className={iconClassName ?? styles.icon}
-        src={`static/assets/template-images/${iconName}`}
+        src={iconSrc}
       />
     </div>
   );

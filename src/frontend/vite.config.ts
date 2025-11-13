@@ -25,9 +25,15 @@ export default defineConfig({
           if (assetInfo.name === "style.css") {
             return "assets/main-react-app.css";
           }
+          // Keep SVG and other assets in assets folder with hash for cache busting
+          if (assetInfo.name?.endsWith('.svg')) {
+            return "assets/[name]-[hash][extname]";
+          }
           return "assets/[name][extname]";
         },
       },
     },
   },
+  // Ensure assets are properly handled
+  assetsInclude: ['**/*.svg'],
 });
