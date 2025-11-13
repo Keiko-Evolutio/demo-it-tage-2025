@@ -303,7 +303,7 @@ async def upload_document(
         )
 
 
-@router.delete("/delete-all-chunks", dependencies=[Depends(authenticate)])
+@router.delete("/delete-all-chunks")
 async def delete_all_chunks(
     search_index_manager: SearchIndexManager = Depends(get_search_index_manager)
 ):
