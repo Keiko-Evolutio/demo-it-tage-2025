@@ -9,6 +9,9 @@ COPY . .
 
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
+# Download NLTK data for document chunking
+RUN python -c "import nltk; nltk.download('punkt_tab')"
+
 # Install Node.js and pnpm with specific versions
 RUN apt-get update \
     && apt-get install -y curl \

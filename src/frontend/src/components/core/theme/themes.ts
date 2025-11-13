@@ -5,24 +5,24 @@ import {
   Theme,
 } from "@fluentui/react-components";
 
-// Define our brand colors for the theme
+// Define our brand colors for the theme - Keiko Brand Color #DCFF4A
 const brandColors: BrandVariants = {
-  10: "#010306",
-  20: "#071926",
-  30: "#002A41",
-  40: "#003653",
-  50: "#004365",
-  60: "#005078",
-  70: "#005E8B",
-  80: "#007BB4",
-  90: "#007BB4",
-  100: "#008AC9",
-  110: "#0099DE",
-  120: "#00A8F4",
-  130: "#3FB6FF",
-  140: "#73C3FF",
-  150: "#98D0FF",
-  160: "#B8DEFF",
+  10: "#0A0D02",
+  20: "#1A1F05",
+  30: "#2A3208",
+  40: "#3A450B",
+  50: "#4A580E",
+  60: "#5A6B11",
+  70: "#6A7E14",
+  80: "#8AA51A",
+  90: "#AAC820",
+  100: "#CAEB26",
+  110: "#D4F335",
+  120: "#DCFF4A",  // Keiko Brand Color
+  130: "#E3FF6F",
+  140: "#E9FF8F",
+  150: "#F0FFAF",
+  160: "#F7FFCF",
 };
 
 export const lightTheme: Theme = {

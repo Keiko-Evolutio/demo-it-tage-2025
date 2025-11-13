@@ -32,6 +32,9 @@ module storageAccount '../storage/storage-account.bicep' = {
       {
         name: 'default'
       }
+      {
+        name: 'documents'
+      }
     ]
     files: [
       {
@@ -131,9 +134,6 @@ module searchService '../search/search-services.bicep' =
 
 
 // Outputs
-output storageAccountId string = storageAccount.outputs.id
-output storageAccountName string = storageAccount.outputs.name
-
 output applicationInsightsId string = !empty(applicationInsightsName) && !empty(logAnalyticsName) ? applicationInsights!.outputs.id : ''
 output applicationInsightsName string = !empty(applicationInsightsName) && !empty(logAnalyticsName) ? applicationInsights!.outputs.name : ''
 output logAnalyticsWorkspaceId string = !empty(logAnalyticsName) ? logAnalytics!.outputs.id : ''
@@ -150,3 +150,7 @@ output searchServiceName string = !empty(searchServiceName) ? searchService!.out
 output searchServiceEndpoint string = !empty(searchServiceName) ? searchService!.outputs.endpoint : ''
 
 output projectResourceId string = cognitiveServices.outputs.projectResourceId
+
+output storageAccountId string = storageAccount.outputs.id
+output storageAccountName string = storageAccount.outputs.name
+output storageAccountBlobEndpoint string = storageAccount.outputs.primaryEndpoints.blob

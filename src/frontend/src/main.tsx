@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './components/App';
+import './global.css';
 
 // Mount the React app to a div with id "react-root" that we'll add to the HTML
 const rootElement = document.getElementById('react-root');

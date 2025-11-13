@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 
 from .search_index_manager import SearchIndexManager
+from .blob_storage_manager import BlobStorageManager
 from .util import get_logger
 
 logger = None
@@ -79,7 +80,7 @@ async def lifespan(app: fastapi.FastAPI):
     embed_dimensions = None
     if os.getenv('AZURE_AI_EMBED_DIMENSIONS'):
         embed_dimensions = int(os.getenv('AZURE_AI_EMBED_DIMENSIONS'))
-        
+
     if endpoint and os.getenv('AZURE_AI_SEARCH_INDEX_NAME') and os.getenv('AZURE_AI_EMBED_DEPLOYMENT_NAME'):
         search_index_manager = SearchIndexManager(
             endpoint = endpoint,
@@ -96,8 +97,27 @@ async def lifespan(app: fastapi.FastAPI):
     else:
         logger.info("The RAG search will not be used.")
 
+    # Initialize blob storage manager if endpoint is available
+    blob_storage_manager = None
+    blob_endpoint = os.environ.get('AZURE_STORAGE_BLOB_ENDPOINT')
+    storage_account_name = os.environ.get('AZURE_STORAGE_ACCOUNT_NAME')
+    if blob_endpoint and storage_account_name:
+        blob_storage_manager = BlobStorageManager(
+            blob_endpoint=blob_endpoint,
+            credential=azure_credential,
+            container_name='documents',
+            storage_account_name=storage_account_name
+        )
+        # Ensure container exists
+        await blob_storage_manager.ensure_container_exists()
+        logger.info("Blob storage manager initialized.")
+    else:
+        logger.info("Blob storage will not be used.")
+
     app.state.chat = chat
     app.state.search_index_manager = search_index_manager
+    app.state.blob_storage_manager = blob_storage_manager
+    app.state.embeddings_client = embed
     app.state.chat_model = os.environ["AZURE_AI_CHAT_DEPLOYMENT_NAME"]
     yield
 
@@ -105,6 +125,8 @@ async def lifespan(app: fastapi.FastAPI):
     await chat.close()
     if search_index_manager is not None:
         await search_index_manager.close()
+    if blob_storage_manager is not None:
+        await blob_storage_manager.close()
 
 
 def create_app():

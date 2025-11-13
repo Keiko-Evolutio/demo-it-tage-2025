@@ -1,9 +1,16 @@
 {
+  "src/img/logo/Logo_Keiko.svg": {
+    "file": "assets/Logo_Keiko-DVNQbM0t.svg",
+    "src": "src/img/logo/Logo_Keiko.svg"
+  },
   "src/main.tsx": {
     "file": "assets/main-react-app.js",
     "name": "main",
     "src": "src/main.tsx",
-    "isEntry": true
+    "isEntry": true,
+    "assets": [
+      "assets/Logo_Keiko-DVNQbM0t.svg"
+    ]
   },
   "style.css": {
     "file": "assets/main-react-app.css",

@@ -1,4 +1,5 @@
 from typing import Optional
+import re
 
 import glob
 import csv
@@ -7,10 +8,10 @@ import json
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.indexes.aio import SearchIndexClient
-from azure.search.documents.models import VectorizedQuery 
+from azure.search.documents.models import VectorizedQuery
 from azure.search.documents.indexes.models import (
     SearchField,
-    SearchFieldDataType,  
+    SearchFieldDataType,
     SimpleField,
     SearchIndex,
     VectorSearch,
@@ -64,12 +65,51 @@ class SearchIndexManager:
                 endpoint=self._endpoint, index_name=self._index.name, credential=self._credential)
         return self._client
 
-    async def search(self, message: ChatRequest) -> str:
+    @staticmethod
+    def _sanitize_key(key: str) -> str:
+        """
+        Sanitize a string to be used as Azure AI Search key.
+
+        Azure AI Search keys can only contain:
+        - Letters (a-z, A-Z, but no umlauts)
+        - Digits (0-9)
+        - Underscore (_)
+        - Dash (-)
+        - Equal sign (=)
+
+        :param key: The key to sanitize
+        :return: Sanitized key
+        """
+        # Replace German umlauts and special characters
+        replacements = {
+            'ä': 'ae', 'ö': 'oe', 'ü': 'ue',
+            'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue',
+            'ß': 'ss',
+            '.': '_', ' ': '_'
+        }
+
+        result = key
+        for old, new in replacements.items():
+            result = result.replace(old, new)
+
+        # Replace any remaining non-allowed characters with underscore
+        # Allowed: letters, digits, underscore, dash, equal sign
+        result = re.sub(r'[^a-zA-Z0-9_\-=]', '_', result)
+
+        # Replace multiple consecutive underscores with single underscore
+        result = re.sub(r'_+', '_', result)
+
+        # Remove leading/trailing underscores
+        result = result.strip('_')
+
+        return result
+
+    async def search(self, message: ChatRequest) -> tuple[str, list[dict]]:
         """
         Search the message in the vector store.
 
         :param message: The customer question.
-        :return: The context for the question.
+        :return: Tuple of (context string, list of source metadata)
         """
         self._raise_if_no_index()
         embedded_question = (await self._embeddings_client.embed(
@@ -80,11 +120,55 @@ class SearchIndexManager:
         vector_query = VectorizedQuery(vector=embedded_question, k_nearest_neighbors=5, fields="embedding")
         response = await self._get_client().search(
             vector_queries=[vector_query],
-            select=['token'],
+            select=['token', 'source_document', 'source_url', 'chunk_index', 'pageNumber'],
         )
-        results = [result['token'] async for result in response]
-        return "\n------\n".join(results)
-    
+
+        results = []
+        sources = []
+        async for result in response:
+            results.append(result['token'])
+            # Collect source metadata
+            if 'source_document' in result and result['source_document']:
+                source_info = {
+                    'document': result.get('source_document', ''),
+                    'url': result.get('source_url', ''),
+                    'chunk_index': result.get('chunk_index', 0),
+                    'page_number': result.get('pageNumber', None)
+                }
+                # Avoid duplicate sources
+                if source_info not in sources:
+                    sources.append(source_info)
+
+        context = "\n------\n".join(results)
+        return context, sources
+
+    async def delete_all_chunks(self) -> int:
+        """
+        Delete all chunks from the search index.
+
+        :return: Number of chunks deleted
+        """
+        self._raise_if_no_index()
+
+        # Search for all documents in the index
+        search_results = await self._get_client().search(
+            search_text="*",  # Match all documents
+            select=["embedId"],
+            top=10000  # Get all chunks (adjust if you have more)
+        )
+
+        # Collect all embed IDs
+        embed_ids = []
+        async for result in search_results:
+            embed_ids.append(result['embedId'])
+
+        # Delete all chunks
+        if embed_ids:
+            documents_to_delete = [{"embedId": embed_id} for embed_id in embed_ids]
+            await self._get_client().delete_documents(documents=documents_to_delete)
+
+        return len(embed_ids)
+
     async def upload_documents(self, embeddings_file: str) -> None:
         """
         Upload the embeggings file to index search.
@@ -97,14 +181,67 @@ class SearchIndexManager:
         with open(embeddings_file, newline='') as fp:
             reader = csv.DictReader(fp)
             for row in reader:
-                documents.append(
-                    {
-                        'embedId': str(index),
-                        'token': row['token'],
-                        'embedding': json.loads(row['embedding'])
-                    }
-                )
+                doc = {
+                    'embedId': str(index),
+                    'token': row['token'],
+                    'embedding': json.loads(row['embedding'])
+                }
+                # Add optional metadata fields if present
+                if 'source_document' in row:
+                    doc['source_document'] = row['source_document']
+                if 'source_url' in row:
+                    doc['source_url'] = row['source_url']
+                if 'chunk_index' in row:
+                    doc['chunk_index'] = int(row['chunk_index'])
+                documents.append(doc)
                 index += 1
+        await self._get_client().upload_documents(documents)
+
+    async def upload_document_chunks(
+        self,
+        chunks: list[dict],
+        source_document: str,
+        source_url: str = ""
+    ) -> None:
+        """
+        Upload document chunks with embeddings to the index.
+
+        :param chunks: List of chunk dictionaries with 'text' and 'page_number' keys
+        :param source_document: Name of the source document
+        :param source_url: URL of the source document in blob storage
+        """
+        self._raise_if_no_index()
+
+        # Sanitize document name for use in embedId (Azure AI Search key requirements)
+        # Keys can only contain letters, digits, underscore (_), dash (-), or equal sign (=)
+        safe_document_name = self._sanitize_key(source_document)
+
+        documents = []
+        for chunk_index, chunk_data in enumerate(chunks):
+            chunk_text = chunk_data['text']
+            page_number = chunk_data.get('page_number', None)
+
+            # Generate embedding for chunk
+            embedding_response = await self._embeddings_client.embed(
+                input=chunk_text,
+                dimensions=self._dimensions,
+                model=self._model
+            )
+            embedding = embedding_response['data'][0]['embedding']
+
+            # Create document with metadata
+            doc = {
+                'embedId': f"{safe_document_name}_{chunk_index}",
+                'token': chunk_text,
+                'embedding': embedding,
+                'source_document': source_document,
+                'source_url': source_url,
+                'chunk_index': chunk_index,
+                'pageNumber': page_number
+            }
+            documents.append(doc)
+
+        # Upload all chunks at once
         await self._get_client().upload_documents(documents)
 
     async def is_index_empty(self) -> bool:
@@ -280,6 +417,10 @@ class SearchIndexManager:
                     vector_search_profile_name="embedding_config"
                 ),
                 SimpleField(name="token", type=SearchFieldDataType.String, hidden=False),
+                SimpleField(name="source_document", type=SearchFieldDataType.String, hidden=False, filterable=True),
+                SimpleField(name="source_url", type=SearchFieldDataType.String, hidden=False),
+                SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, hidden=False),
+                SimpleField(name="pageNumber", type=SearchFieldDataType.Int32, hidden=False, filterable=True),
             ]
             vector_search = VectorSearch(
                 profiles=[VectorSearchProfile(name="embedding_config",

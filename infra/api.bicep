@@ -14,6 +14,8 @@ param searchServiceEndpoint string
 param enableAzureMonitorTracing bool
 param azureTracingGenAIContentRecordingEnabled bool
 param projectEndpoint string
+param storageAccountBlobEndpoint string
+param storageAccountName string
 
 resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: identityName
@@ -64,6 +66,14 @@ var env = [
   {
     name: 'AZURE_EXISTING_AIPROJECT_ENDPOINT'
     value: projectEndpoint
+  }
+  {
+    name: 'AZURE_STORAGE_BLOB_ENDPOINT'
+    value: storageAccountBlobEndpoint
+  }
+  {
+    name: 'AZURE_STORAGE_ACCOUNT_NAME'
+    value: storageAccountName
   }
 ]
 

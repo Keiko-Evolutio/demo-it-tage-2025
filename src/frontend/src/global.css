@@ -1,0 +1,21 @@
+/* Global CSS fixes for Fluent UI components */
+
+/* Ensure MenuPopover is always visible and on top */
+.fui-MenuPopover {
+    z-index: 10000 !important;
+    position: fixed !important;
+}
+
+.fui-Menu {
+    z-index: 10000 !important;
+}
+
+.fui-MenuList {
+    z-index: 10000 !important;
+}
+
+/* Ensure Drawer/Panel is on top */
+.fui-Drawer {
+    z-index: 10001 !important;
+}
+
