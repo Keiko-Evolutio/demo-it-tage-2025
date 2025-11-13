@@ -390,19 +390,10 @@ export function AgentPreview({agentDetails}: IAgentPreviewProps): ReactNode {
                             icon: <MoreHorizontalRegular/>,
                             "aria-label": "Settings",
                         }}
-                        menuPopoverProps={{
-                            inline: true,
-                            style: { zIndex: 9999 }
-                        }}
-                        menuProps={{
-                            onOpenChange: (e, data) => {
-                                console.log('Menu onOpenChange:', data.open);
-                            }
-                        }}
                     />
                 </div>
             </div>
-            <div className={styles.content}>
+            <div className={styles.content}><>
                 {messageList.length === 0 && (
                     <div className={styles.emptyChatContainer}>
                         <AgentIcon
@@ -419,7 +410,7 @@ export function AgentPreview({agentDetails}: IAgentPreviewProps): ReactNode {
                 <AgentPreviewChatBot
                     agentName={agentDetails.name}
                     agentLogo={agentDetails.metadata?.logo}
-                    chatContext={chatContext}/>
+                    chatContext={chatContext}/>          </>
             </div>
 
             {/* Settings Panel */}
