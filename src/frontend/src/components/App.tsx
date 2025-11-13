@@ -1,5 +1,6 @@
 import { AgentPreview } from "./agents/AgentPreview";
 import { ThemeProvider } from "./core/theme/ThemeProvider";
+import KeikoLogo from "~/img/logo/Logo_Keiko.svg";
 
 const App: React.FC = () => {
   // State to store the agent details
@@ -11,7 +12,7 @@ const App: React.FC = () => {
       description: "This is a sample chatbot.",
       model: "default",
       metadata: {
-        logo: "Avatar_Default.svg",
+        logo: KeikoLogo,
       },
   };
 
