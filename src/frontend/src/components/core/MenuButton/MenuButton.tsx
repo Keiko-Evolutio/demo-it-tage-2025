@@ -51,6 +51,7 @@ export const MenuButton = forwardRef<HTMLButtonElement, IMenuButtonProps>(
   ): ReactNode => {
     const handleMenuButtonClick = useCallback(
       (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+        console.log('MenuButton clicked!', event);
         if (menuButtonProps?.onClick) {
           if (event.currentTarget instanceof HTMLButtonElement) {
             (menuButtonProps.onClick as MouseEventHandler<HTMLButtonElement>)(

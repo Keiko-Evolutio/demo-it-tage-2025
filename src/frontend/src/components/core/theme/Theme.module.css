@@ -1,0 +1,28 @@
+.floatingPaths {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    height: 100vh;
+    width: 100%;
+    background-color: var(--colorNeutralBackground1);
+    pointer-events: none;
+}
+
+.floatingPaths01 {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.floatingPaths02 {
+    width: 100%;
+    height: 100%;
+    color: var(--colorNeutralBackground3);
+}
+
+.floatingPaths03 {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+}
