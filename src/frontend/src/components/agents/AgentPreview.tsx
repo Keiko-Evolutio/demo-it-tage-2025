@@ -390,6 +390,15 @@ export function AgentPreview({agentDetails}: IAgentPreviewProps): ReactNode {
                             icon: <MoreHorizontalRegular/>,
                             "aria-label": "Settings",
                         }}
+                        menuPopoverProps={{
+                            inline: true,
+                            style: { zIndex: 9999 }
+                        }}
+                        menuProps={{
+                            onOpenChange: (e, data) => {
+                                console.log('Menu onOpenChange:', data.open);
+                            }
+                        }}
                     />
                 </div>
             </div>

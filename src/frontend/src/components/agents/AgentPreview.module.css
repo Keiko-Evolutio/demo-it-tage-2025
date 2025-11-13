@@ -3,7 +3,6 @@
   flex-direction: column;
   height: 100vh;
   width: 100%;
-  background-color: var(--colorNeutralBackground1);
 }
 
 .topBar {
@@ -106,4 +105,13 @@
   display: flex;
   align-items: center;
   width: 100%;
+}
+
+/* Force MenuPopover to be visible */
+:global(.fui-MenuPopover) {
+  z-index: 9999 !important;
+}
+
+:global(.fui-Menu) {
+  z-index: 9999 !important;
 }
