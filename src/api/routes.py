@@ -21,35 +21,7 @@ from .document_processor import DocumentProcessor
 from azure.core.exceptions import HttpResponseError
 
 
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from typing import Optional
-import secrets
 
-security = HTTPBasic()
-
-
-username = os.getenv("WEB_APP_USERNAME")
-password = os.getenv("WEB_APP_PASSWORD")
-basic_auth = username and password
-
-def authenticate(credentials: Optional[HTTPBasicCredentials] = Depends(security)) -> None:
-
-    if not basic_auth:
-        logger.info("Skipping authentication: WEB_APP_USERNAME or WEB_APP_PASSWORD not set.")
-        return
-    
-    correct_username = secrets.compare_digest(credentials.username, username)
-    correct_password = secrets.compare_digest(credentials.password, password)
-    if not (correct_username and correct_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return
-
-auth_dependency = Depends(authenticate) if basic_auth else None
 
 logger = get_logger(
     name="azureaiapp_routes",
@@ -84,9 +56,9 @@ def serialize_sse_event(data: Dict) -> str:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def index_name(request: Request, _ = auth_dependency):
+async def index_name(request: Request):
     return templates.TemplateResponse(
-        "index.html", 
+        "index.html",
         {
             "request": request,
         }
@@ -98,8 +70,7 @@ async def chat_stream_handler(
     chat_client: ChatCompletionsClient = Depends(get_chat_client),
     model_deployment_name: str = Depends(get_chat_model),
     search_index_manager: SearchIndexManager = Depends(get_search_index_manager),
-    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
-    _ = auth_dependency
+    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager)
 ) -> fastapi.responses.StreamingResponse:
     
     headers = {
@@ -208,8 +179,7 @@ async def chat_stream_handler(
 async def upload_document(
     file: UploadFile = File(...),
     search_index_manager: SearchIndexManager = Depends(get_search_index_manager),
-    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager),
-    _ = auth_dependency
+    blob_storage_manager: BlobStorageManager = Depends(get_blob_storage_manager)
 ) -> JSONResponse:
     """
     Upload and process a document for RAG.
