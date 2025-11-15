@@ -1,0 +1,64 @@
+[project]
+name = "foundry-tools-it-tage-2025"
+version = "1.0.0"
+description = "Helper-Bibliothek für IT-Tage 2025 AI Agents Workshop"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "Workshop Team", email = "workshop@it-tage-2025.de" }
+]
+keywords = ["azure", "ai", "agents", "foundry", "it-tage-2025"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "azure-identity>=1.15.0",
+    "azure-keyvault-secrets>=4.7.0",
+    "azure-search-documents>=11.4.0",
+    "azure-ai-formrecognizer>=3.3.0",
+    "azure-storage-blob>=12.20.0",
+    "requests>=2.31.0",
+    "PyPDF2>=3.0.0",
+    "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+notebooks = [
+    "jupyter>=1.0.0",
+    "ipywidgets>=8.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["foundry_tools"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+lint.select = ["E", "F", "I", "UP"]
+lint.ignore = ["D203"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

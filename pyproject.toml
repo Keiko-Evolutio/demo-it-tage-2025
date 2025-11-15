@@ -1,3 +1,30 @@
+[project]
+name = "demo-it-tage-2025"
+version = "1.0.0"
+description = "IT-Tage 2025 Workshop - AI Agents mit Azure"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Oliver Scharkowski", email = "o.scharkowski@oscharko.de" }
+]
+
+dependencies = [
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+]
+
+[tool.uv]
+# Workshop Tools als lokales Paket
+dev-dependencies = []
+
+[tool.uv.sources]
+workshop-tools-it-tage-2025 = { path = "tools_and_data/workshop_tools", editable = true }
+
 [tool.ruff]
 line-length = 120
 target-version = "py39"
