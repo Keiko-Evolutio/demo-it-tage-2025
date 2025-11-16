@@ -39,7 +39,7 @@ param openAiDeploymentModelPublisher string = 'OpenAI'
 param openAiDeploymentModelFormat string = 'OpenAI'
 
 @description('Version des Modells')
-param openAiDeploymentModelVersion string = '2024-05-13'
+param openAiDeploymentModelVersion string = '2024-07-18'
 
 @description('SKU für das Modell-Deployment')
 param openAiDeploymentSku string = 'GlobalStandard'
@@ -307,6 +307,7 @@ resource createAgent 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
 
       token=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
 
+      # Create or update bing-grounding-agent
       payload=$(cat <<JSON
       {
         "model": "${AGENT_MODEL}",
@@ -340,12 +341,72 @@ resource createAgent 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
 JSON
 )
 
+      # Delete existing agent if it exists
+      existing=$(az rest --method get --url "$PROJECT_ENDPOINT/assistants?api-version=v1" \
+        --headers Authorization="Bearer $token" | jq -r ".data[] | select(.name==\"${AGENT_NAME}\") | .id")
+
+      if [ -n "$existing" ]; then
+        echo "Deleting existing agent: $existing"
+        az rest --method delete --url "$PROJECT_ENDPOINT/assistants/$existing?api-version=v1" \
+          --headers Authorization="Bearer $token" || true
+      fi
+
+      # Create new agent
       rsp=$(az rest --method post --url "$PROJECT_ENDPOINT/assistants?api-version=v1" \
         --headers Authorization="Bearer $token" Content-Type=application/json \
         --body "$payload")
 
+      # Create or update deep-research-agent
+      deep_payload=$(cat <<JSON
+      {
+        "model": "${AGENT_MODEL}",
+        "name": "deep-research-agent",
+        "instructions": "Du bist ein Deep Research Agent. Nutze Azure AI Search für interne Inhalte (Index ${SEARCH_INDEX}) und Bing Grounding für aktuelles Webwissen. Führe gründliche Recherchen durch und antworte mit detaillierten Quellenhinweisen.",
+        "tools": [
+          { "type": "azure_ai_search" },
+          {
+            "type": "bing_grounding",
+            "bing_grounding": {
+              "search_configurations": [
+                {
+                  "connection_id": "${BING_CONN_ID}"
+                }
+              ]
+            }
+          }
+        ],
+        "tool_resources": {
+          "azure_ai_search": {
+            "indexes": [
+              {
+                "index_connection_id": "${SEARCH_CONN_ID}",
+                "index_name": "${SEARCH_INDEX}",
+                "query_type": "semantic"
+              }
+            ]
+          }
+        }
+      }
+JSON
+)
+
+      # Delete existing deep-research-agent if it exists
+      existing_deep=$(az rest --method get --url "$PROJECT_ENDPOINT/assistants?api-version=v1" \
+        --headers Authorization="Bearer $token" | jq -r '.data[] | select(.name=="deep-research-agent") | .id')
+
+      if [ -n "$existing_deep" ]; then
+        echo "Deleting existing deep-research-agent: $existing_deep"
+        az rest --method delete --url "$PROJECT_ENDPOINT/assistants/$existing_deep?api-version=v1" \
+          --headers Authorization="Bearer $token" || true
+      fi
+
+      # Create new deep-research-agent
+      deep_rsp=$(az rest --method post --url "$PROJECT_ENDPOINT/assistants?api-version=v1" \
+        --headers Authorization="Bearer $token" Content-Type=application/json \
+        --body "$deep_payload")
+
       # Outputs für Bicep
-      printf '{"agent": %s}' "$rsp" > "$AZ_SCRIPTS_OUTPUT_PATH"
+      printf '{"agent": %s, "deepResearchAgent": %s}' "$rsp" "$deep_rsp" > "$AZ_SCRIPTS_OUTPUT_PATH"
     '''
   }
   dependsOn: [
@@ -372,3 +433,4 @@ output connectionIds object = {
   bing: connBing.id
 }
 output agent object = createAgent.properties.outputs.agent
+output deepResearchAgent object = createAgent.properties.outputs.deepResearchAgent
