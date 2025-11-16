@@ -1,8 +1,13 @@
 // ============================================================================
-// Azure AI Search (Vector Database) - Bicep Module
+// Azure AI Search (Vector Database) - Complete Workshop Stack
 // ============================================================================
-// Dieses Modul erstellt einen Azure AI Search Service für den Workshop.
-// Der Service wird für Vector Search, Hybrid Search und Semantic Search verwendet.
+// Dieses Modul erstellt die komplette Infrastruktur für den Vector DB Workshop:
+// - Azure AI Services (für OpenAI Embeddings + Chat)
+// - Embedding Model Deployment (text-embedding-3-small)
+// - Chat Model Deployment (gpt-4o-mini)
+// - Azure AI Search (Vector Database)
+// - Storage Account + Blob Container (für Dokumente)
+// - AI Project + Connections (für Azure AI Foundry)
 // ============================================================================
 
 // ============================================================================
@@ -15,7 +20,7 @@ param environmentName string
 @description('Azure Region für die Ressource')
 param location string = resourceGroup().location
 
-@description('SKU des Search Service (Basic, Standard, Standard2, Standard3, Storage_Optimized_L1, Storage_Optimized_L2)')
+@description('SKU des Search Service (basic, standard, standard2, standard3)')
 @allowed([
   'basic'
   'standard'
@@ -26,17 +31,7 @@ param location string = resourceGroup().location
 ])
 param searchServiceSku string = 'standard'
 
-@description('Anzahl der Replicas (1-12, abhängig von SKU)')
-@minValue(1)
-@maxValue(12)
-param replicaCount int = 1
-
-@description('Anzahl der Partitions (1-12, abhängig von SKU)')
-@minValue(1)
-@maxValue(12)
-param partitionCount int = 1
-
-@description('Semantic Search aktivieren (free, standard)')
+@description('Semantic Search aktivieren (disabled, free, standard)')
 @allowed([
   'disabled'
   'free'
@@ -44,10 +39,40 @@ param partitionCount int = 1
 ])
 param semanticSearch string = 'free'
 
-@description('Public Network Access aktivieren')
-param publicNetworkAccess bool = true
+@description('Embedding Model Name')
+param embeddingModelName string = 'text-embedding-3-small'
 
-@description('Tags für die Ressource')
+@description('Embedding Model Version')
+param embeddingModelVersion string = '1'
+
+@description('Embedding Deployment Capacity (TPM in thousands)')
+param embeddingDeploymentCapacity int = 120
+
+@description('Chat Model Name')
+param chatModelName string = 'gpt-4o-mini'
+
+@description('Chat Model Version')
+param chatModelVersion string = '2024-07-18'
+
+@description('Chat Deployment Capacity (TPM in thousands)')
+param chatDeploymentCapacity int = 30
+
+@description('Storage Account SKU')
+@allowed([
+  'Standard_LRS'
+  'Standard_GRS'
+  'Standard_RAGRS'
+  'Standard_ZRS'
+])
+param storageAccountSku string = 'Standard_LRS'
+
+@description('Blob Container Name für Workshop-Dokumente')
+param blobContainerName string = 'workshop-documents'
+
+@description('Index Name für Vector Search')
+param searchIndexName string = 'workshop-documents'
+
+@description('Tags für alle Ressourcen')
 param tags object = {
   purpose: 'workshop'
   event: 'IT-Tage-2025'
@@ -59,65 +84,190 @@ param tags object = {
 // VARIABLEN
 // ============================================================================
 
-// Search Service Name (muss global eindeutig sein)
-var searchServiceName = 'search-workshop-${environmentName}'
+// Resource Names (müssen global eindeutig sein)
+var aiServicesName = 'ai-services-vector-db-${environmentName}'
+var aiProjectName = 'ai-project-vector-db-${environmentName}'
+var searchServiceName = 'search-vector-db-${environmentName}'
+var storageAccountName = 'stvectordb${replace(environmentName, '-', '')}' // Storage names: no hyphens, lowercase
+var embeddingDeploymentName = embeddingModelName
+var chatDeploymentName = chatModelName
 
-// Managed Identity für sichere Authentifizierung
-var searchIdentityProvider = {
-  type: 'SystemAssigned'
-}
+// Connection Names
+var connOpenAiName = 'conn-openai'
+var connSearchName = 'conn-search'
+var connStorageName = 'conn-storage'
 
 // ============================================================================
 // RESSOURCEN
 // ============================================================================
 
-// Azure AI Search Service
+// 1) Azure AI Services (für OpenAI Embeddings + Chat)
+resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
+  name: aiServicesName
+  location: location
+  kind: 'AIServices'
+  tags: tags
+  sku: { name: 'S0' }
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    customSubDomainName: aiServicesName
+    publicNetworkAccess: 'Enabled'
+    disableLocalAuth: false
+    allowProjectManagement: true
+  }
+}
+
+// 2) Embedding Model Deployment
+resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
+  parent: aiServices
+  name: embeddingDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: embeddingDeploymentCapacity
+  }
+  properties: {
+    model: {
+      name: embeddingModelName
+      publisher: 'OpenAI'
+      format: 'OpenAI'
+      version: embeddingModelVersion
+    }
+  }
+}
+
+// 3) Chat Model Deployment
+resource chatDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-04-01-preview' = {
+  parent: aiServices
+  name: chatDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: chatDeploymentCapacity
+  }
+  properties: {
+    model: {
+      name: chatModelName
+      publisher: 'OpenAI'
+      format: 'OpenAI'
+      version: chatModelVersion
+    }
+  }
+  dependsOn: [
+    embeddingDeployment  // Ensure sequential deployment
+  ]
+}
+
+// 4) Azure AI Search Service (Vector Database)
 resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
   name: searchServiceName
   location: location
   tags: tags
-  
-  // Managed Identity aktivieren
-  identity: searchIdentityProvider
-  
-  // SKU und Kapazität
-  sku: {
-    name: searchServiceSku
-  }
-  
+  identity: { type: 'SystemAssigned' }
+  sku: { name: searchServiceSku }
   properties: {
-    // Replicas für Hochverfügbarkeit und Load Balancing
-    replicaCount: replicaCount
-    
-    // Partitions für Skalierung der Datenmenge
-    partitionCount: partitionCount
-    
-    // Hosting Mode (default = Standard)
+    replicaCount: 1
+    partitionCount: 1
     hostingMode: 'default'
-    
-    // Public Network Access
-    publicNetworkAccess: publicNetworkAccess ? 'enabled' : 'disabled'
-    
-    // Semantic Search Konfiguration
-    // Free Tier: 1000 Queries/Monat kostenlos
-    // Standard Tier: Unbegrenzt, aber kostenpflichtig
+    publicNetworkAccess: 'enabled'
     semanticSearch: semanticSearch
-    
-    // Authentifizierung
-    // Sowohl API Keys als auch RBAC werden unterstützt
-    authOptions: {
-      // API Key Authentication aktivieren (für einfachen Zugriff)
-      apiKeyOnly: {}
-    }
-    
-    // Disable Local Auth = false bedeutet API Keys sind aktiviert
-    // Für Workshop: API Keys + RBAC (Hybrid-Ansatz)
+    authOptions: { apiKeyOnly: {} }
     disableLocalAuth: false
-    
-    // Network Rules (optional, für erweiterte Sicherheit)
-    // networkRuleSet: {
-    //   ipRules: []
-    // }
+  }
+}
+
+// 5) Storage Account (für Dokumente)
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
+  location: location
+  tags: tags
+  kind: 'StorageV2'
+  sku: { name: storageAccountSku }
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// 6) Blob Container für Workshop-Dokumente
+resource blobContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  name: '${storageAccount.name}/default/${blobContainerName}'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// 7) AI Project (für Azure AI Foundry)
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview' = {
+  parent: aiServices
+  name: aiProjectName
+  location: location
+  tags: tags
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    description: 'Vector Database Workshop Project'
+    displayName: 'Vector DB Workshop'
+  }
+}
+
+// 8) Connection: OpenAI (AI Services)
+resource connOpenAi 'Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview' = {
+  parent: aiProject
+  name: connOpenAiName
+  properties: {
+    category: 'AIServices'
+    target: aiServices.properties.endpoint
+    authType: 'ApiKey'
+    isSharedToAll: true
+    credentials: {
+      key: aiServices.listKeys().key1
+    }
+    metadata: {
+      ApiVersion: '2024-02-15-preview'
+      ApiType: 'Azure'
+      ResourceId: aiServices.id
+    }
+  }
+}
+
+// 9) Connection: Azure AI Search
+resource connSearch 'Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview' = {
+  parent: aiProject
+  name: connSearchName
+  properties: {
+    category: 'CognitiveSearch'
+    target: 'https://${searchService.name}.search.windows.net/'
+    authType: 'ApiKey'
+    isSharedToAll: true
+    credentials: {
+      key: searchService.listAdminKeys().primaryKey
+    }
+    metadata: {
+      ApiVersion: '2024-07-01'
+      ResourceId: searchService.id
+    }
+  }
+}
+
+// 10) Connection: Storage Account
+resource connStorage 'Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview' = {
+  parent: aiProject
+  name: connStorageName
+  properties: {
+    category: 'AzureBlob'
+    target: storageAccount.properties.primaryEndpoints.blob
+    authType: 'ApiKey'
+    isSharedToAll: true
+    credentials: {
+      key: storageAccount.listKeys().keys[0].value
+    }
+    metadata: {
+      AccountName: storageAccount.name
+      ResourceId: storageAccount.id
+      ContainerName: blobContainerName
+    }
   }
 }
 
@@ -125,64 +275,115 @@ resource searchService 'Microsoft.Search/searchServices@2024-06-01-preview' = {
 // OUTPUTS
 // ============================================================================
 
-@description('Name des Search Service')
+// AI Services (OpenAI) Outputs
+@description('AI Services Endpoint (Azure OpenAI)')
+output aiServicesEndpoint string = aiServices.properties.endpoint
+
+@description('AI Services API Key')
+#disable-next-line outputs-should-not-contain-secrets
+output aiServicesApiKey string = aiServices.listKeys().key1
+
+@description('AI Services Name')
+output aiServicesName string = aiServices.name
+
+@description('Embedding Deployment Name')
+output embeddingDeploymentName string = embeddingDeployment.name
+
+@description('Embedding Model Name')
+output embeddingModelName string = embeddingModelName
+
+@description('Chat Deployment Name')
+output chatDeploymentName string = chatDeployment.name
+
+@description('Chat Model Name')
+output chatModelName string = chatModelName
+
+// Azure AI Search Outputs
+@description('Search Service Name')
 output searchServiceName string = searchService.name
 
-@description('Resource ID des Search Service')
-output searchServiceId string = searchService.id
-
-@description('Endpoint des Search Service')
+@description('Search Service Endpoint')
 output searchServiceEndpoint string = 'https://${searchService.name}.search.windows.net/'
 
-@description('Admin Key des Search Service (für Management-Operationen)')
+@description('Search Service Admin Key')
 #disable-next-line outputs-should-not-contain-secrets
 output searchServiceAdminKey string = searchService.listAdminKeys().primaryKey
 
-@description('Query Key des Search Service (für Read-Only Operationen)')
+@description('Search Service Query Key')
 #disable-next-line outputs-should-not-contain-secrets
 output searchServiceQueryKey string = searchService.listQueryKeys().value[0].key
 
-@description('Principal ID der Managed Identity')
-output searchServicePrincipalId string = searchService.identity.principalId
+@description('Search Index Name')
+output searchIndexName string = searchIndexName
 
-@description('Tenant ID der Managed Identity')
-output searchServiceTenantId string = searchService.identity.tenantId
+// Storage Account Outputs
+@description('Storage Account Name')
+output storageAccountName string = storageAccount.name
+
+@description('Storage Account Blob Endpoint')
+output storageAccountBlobEndpoint string = storageAccount.properties.primaryEndpoints.blob
+
+@description('Storage Account Connection String')
+#disable-next-line outputs-should-not-contain-secrets
+output storageConnectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+
+@description('Blob Container Name')
+output blobContainerName string = blobContainerName
+
+// AI Project Outputs
+@description('AI Project Name')
+output aiProjectName string = aiProject.name
+
+@description('AI Project Endpoint')
+output aiProjectEndpoint string = 'https://${aiServices.properties.endpoint}/projects/${aiProject.name}'
 
 // ============================================================================
-// HINWEISE FÜR STUDENTEN
+// HINWEISE FÜR WORKSHOP-TEILNEHMER
 // ============================================================================
-// 
-// 1. KOSTEN:
-//    - Basic SKU: ~70€/Monat
-//    - Standard SKU: ~230€/Monat (empfohlen für Workshop)
-//    - Semantic Search (Free): Kostenlos (1000 Queries/Monat)
 //
-// 2. KAPAZITÄT:
-//    - Replicas: Erhöhen die Verfügbarkeit und Query-Performance
-//    - Partitions: Erhöhen die Speicherkapazität und Indexing-Performance
-//    - Standard SKU: Bis zu 25 GB pro Partition
+// ERSTELLTE RESSOURCEN:
 //
-// 3. RATE LIMITS:
-//    - Basic: 3 Queries/Sekunde pro Replica
-//    - Standard: 15 Queries/Sekunde pro Replica
-//    - Indexing: 180 Dokumente/Sekunde (Standard)
+// 1. Azure AI Services (OpenAI)
+//    - Endpoint: {aiServicesEndpoint}
+//    - Embedding Model: {embeddingModelName}
+//    - Deployment: {embeddingDeploymentName}
+//    - Verwendung: Generierung von Embeddings für Vector Search
 //
-// 4. AUTHENTIFIZIERUNG:
-//    - API Keys: Einfach, aber weniger sicher
-//    - RBAC (Managed Identity): Sicherer, empfohlen für Produktion
-//    - Hybrid: Beide Methoden aktiviert (für Workshop)
+// 2. Azure AI Search (Vector Database)
+//    - Endpoint: {searchServiceEndpoint}
+//    - SKU: {searchServiceSku}
+//    - Semantic Search: {semanticSearch}
+//    - Verwendung: Vector Search, Hybrid Search, Semantic Search
 //
-// 5. SEMANTIC SEARCH:
-//    - Free Tier: 1000 Queries/Monat kostenlos
-//    - Verbessert Relevanz durch KI-basiertes Ranking
-//    - Automatische Zusammenfassungen (Captions)
-//    - Hervorhebung relevanter Passagen (Highlights)
+// 3. Storage Account + Blob Container
+//    - Account: {storageAccountName}
+//    - Container: {blobContainerName}
+//    - Verwendung: Speicherung von Workshop-Dokumenten
 //
-// 6. NÄCHSTE SCHRITTE:
-//    - Index erstellen (automatisch beim ersten Upload)
-//    - Dokumente hochladen (siehe Notebook 02_upload_documents.ipynb)
-//    - Suchen durchführen (siehe Notebook 03_vector_search.ipynb)
-//    - RBAC-Rollen zuweisen (siehe assign-rbac-roles.sh)
+// 4. AI Project + Connections
+//    - Project: {aiProjectName}
+//    - Connections: OpenAI, Search, Storage
+//    - Verwendung: Azure AI Foundry Integration
+//
+// KOSTEN (Schätzung):
+//    - AI Services S0: ~0.40€/1000 Tokens (Embeddings)
+//    - Search Standard: ~230€/Monat
+//    - Storage LRS: ~0.02€/GB/Monat
+//    - Semantic Search (Free): 1000 Queries/Monat kostenlos
+//
+// NÄCHSTE SCHRITTE:
+//    1. Dokumente hochladen: python tools_and_data/workshop_tools/azure_tools/blob_store/upload_sample_data.py
+//    2. Pipeline erstellen: Siehe Notebook 01_azure_ai_search_complete_guide.ipynb
+//    3. Vector Search testen: Siehe Notebook examples
+//
+// WICHTIGE ENVIRONMENT VARIABLEN (werden automatisch gesetzt):
+//    - AZURE_OPENAI_ENDPOINT
+//    - AZURE_OPENAI_API_KEY
+//    - AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+//    - VECTOR_DB_ENDPOINT
+//    - VECTOR_DB_ADMIN_KEY
+//    - FILE_STORAGE_CONNECTION_STRING
+//    - FILE_STORAGE_CONTAINER_NAME
 //
 // ============================================================================
 

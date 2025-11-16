@@ -1,20 +1,19 @@
-targetScope = 'subscription'
+// ============================================================================
+// Azure AI Search (Bing Search Grounding) - Bicep Module
+// ============================================================================
+// Dieses Modul erstellt einen Azure AI Search Service für den Workshop.
+// Der Service wird für Bing Grounding verwendet mit einem Agent verbunden.
+// ============================================================================
 
 // ============================================================================
-// Azure AI Agents + Azure AI Search + Grounding with Bing Search (Bicep)
+// PARAMETER
 // ============================================================================
 
-// ---------------------------
-// Parameters
-// ---------------------------
 @description('Name der Umgebung (z.B. it-tage-2025)')
 param environmentName string
 
-@description('Azure Region')
-param location string = 'swedencentral'
-
-@description('Resource Group für die Bing-Grounding-Umgebung')
-param resourceGroupName string = 'it-tage-2025-bing-search'
+@description('Azure Region für die Ressource')
+param location string = resourceGroup().location
 
 @description('SKU für Grounding with Bing Search (G1)')
 @allowed([ 'G1' ])
@@ -65,17 +64,11 @@ param tags object = {
 // ---------------------------
 // Names
 // ---------------------------
-var bingGroundingName = 'bing-grounding-${environmentName}'
-var aiServicesName    = 'ai-services-${environmentName}'
-var aiProjectName     = 'ai-project-${environmentName}'
-var searchName        = 'ai-search-${environmentName}'
-
-// Resource Group sicherstellen
-resource targetRg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: resourceGroupName
-  location: location
-  tags: tags
-}
+var bingGroundingName = 'bing-grounding-bing-search-${environmentName}'
+var aiServicesName    = 'ai-services-bing-search-${environmentName}'
+var aiProjectName     = 'ai-project-bing-search-${environmentName}'
+var searchName        = 'ai-search-bing-search-${environmentName}'
+var currentResourceGroupName = resourceGroup().name
 
 // Connection Names
 var connOpenAiName = 'conn-aiservices'
@@ -89,7 +82,6 @@ var capabilityHostName = 'agents-host'
 
 // 1) Grounding with Bing Search (separates RP)
 resource bingGrounding 'Microsoft.Bing/accounts@2020-06-10' = {
-  scope: targetRg
   name: bingGroundingName
   location: 'global'
   tags: tags
@@ -102,7 +94,6 @@ resource bingGrounding 'Microsoft.Bing/accounts@2020-06-10' = {
 
 // 2) Azure AI Services (Foundry "Account" / Hub)
 resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
-  scope: targetRg
   name: aiServicesName
   location: location
   kind: 'AIServices'
@@ -150,7 +141,6 @@ resource aiModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@202
 
 // 5) Azure AI Search (Cognitive Search)
 resource search 'Microsoft.Search/searchServices@2025-05-01' = {
-  scope: targetRg
   name: searchName
   location: location
   sku: { name: toLower(searchSku) }
@@ -229,7 +219,6 @@ resource capabilityHostAccount 'Microsoft.CognitiveServices/accounts/capabilityH
     ]
   }
   dependsOn: [
-    connOpenAi
     aiModelDeployment
   ]
 }
@@ -248,7 +237,6 @@ resource capabilityHost 'Microsoft.CognitiveServices/accounts/projects/capabilit
     // storageConnections: [ 'conn-storage' ]
   }
   dependsOn: [
-    connOpenAi
     capabilityHostAccount
     aiModelDeployment
   ]
@@ -256,7 +244,6 @@ resource capabilityHost 'Microsoft.CognitiveServices/accounts/projects/capabilit
 
 // 8) Verwaltete Identität + Rollenzuweisung für das Deployment Script
 resource createAgentIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  scope: targetRg
   name: 'identity-create-agent-${environmentName}'
   location: location
   tags: tags
@@ -294,7 +281,6 @@ resource createAgentManagerRole 'Microsoft.Authorization/roleAssignments@2022-04
 
 // 9) Erzeuge den Agent per Deployment Script (Agents-API v1)
 resource createAgent 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
-  scope: targetRg
   name: 'create-agent-${environmentName}'
   location: location
   kind: 'AzureCLI'
@@ -312,8 +298,8 @@ resource createAgent 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
       { name: 'PROJECT_ENDPOINT', value: 'https://${aiServices.name}.services.ai.azure.com/api/projects/${aiProject.name}' }
       { name: 'AGENT_MODEL', value: agentModel }
       { name: 'AGENT_NAME', value: agentName }
-      { name: 'SEARCH_CONN_ID', value: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiServices.name}/projects/${aiProject.name}/connections/${connSearch.name}' }
-      { name: 'BING_CONN_ID', value: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiServices.name}/projects/${aiProject.name}/connections/${connBing.name}' }
+      { name: 'SEARCH_CONN_ID', value: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${currentResourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiServices.name}/projects/${aiProject.name}/connections/${connSearch.name}' }
+      { name: 'BING_CONN_ID', value: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${currentResourceGroupName}/providers/Microsoft.CognitiveServices/accounts/${aiServices.name}/projects/${aiProject.name}/connections/${connBing.name}' }
       { name: 'SEARCH_INDEX', value: searchIndexName }
     ]
     scriptContent: '''
@@ -364,8 +350,6 @@ JSON
   }
   dependsOn: [
     capabilityHost
-    connSearch
-    connBing
     createAgentRole
     createAgentDataRole
     createAgentManagerRole
@@ -376,7 +360,7 @@ JSON
 // ---------------------------
 // Outputs
 // ---------------------------
-output resourceGroupName string = resourceGroupName
+output resourceGroupName string = currentResourceGroupName
 output bingGroundingId string = bingGrounding.id
 output aiServicesEndpoint string = 'https://${aiServices.name}.services.ai.azure.com'
 output aiProjectEndpoint string = 'https://${aiServices.name}.services.ai.azure.com/api/projects/${aiProject.name}'

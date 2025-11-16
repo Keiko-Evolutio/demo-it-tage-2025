@@ -44,10 +44,10 @@ if [[ -z "$RESOURCE_GROUP" || -z "$LOCATION" || -z "$ENVIRONMENT_NAME" ]]; then
     exit 1
 fi
 
-BING_ACCOUNT="bing-grounding-${ENVIRONMENT_NAME}"
-AI_SERVICES="ai-services-${ENVIRONMENT_NAME}"
-AI_PROJECT="ai-project-${ENVIRONMENT_NAME}"
-SEARCH_SERVICE="ai-search-${ENVIRONMENT_NAME}"
+BING_ACCOUNT="bing-grounding-bing-search-${ENVIRONMENT_NAME}"
+AI_SERVICES="ai-services-bing-search-${ENVIRONMENT_NAME}"
+AI_PROJECT="ai-project-bing-search-${ENVIRONMENT_NAME}"
+SEARCH_SERVICE="ai-search-bing-search-${ENVIRONMENT_NAME}"
 SEARCH_CONN_NAME="conn-search"
 BING_CONN_NAME="conn-bing-grounding"
 

@@ -1,8 +1,12 @@
 #!/bin/bash
 # ============================================================================
-# Deployment Script for Azure AI Search (Vector Database)
+# Deployment Script for Vector Database Workshop Stack
 # ============================================================================
-# This script deploys the Azure AI Search service using vector-search.bicep
+# This script deploys the complete infrastructure for the Vector DB Workshop:
+# - Azure AI Services (OpenAI Embeddings)
+# - Azure AI Search (Vector Database)
+# - Storage Account + Blob Container
+# - AI Project + Connections
 # ============================================================================
 
 set -e
@@ -42,10 +46,16 @@ BICEP_FILE="$SCRIPT_DIR/vector-search.bicep"
 
 # Deployment parameters
 SEARCH_SERVICE_SKU="standard"
-REPLICA_COUNT=1
-PARTITION_COUNT=1
 SEMANTIC_SEARCH="free"
-PUBLIC_NETWORK_ACCESS=true
+EMBEDDING_MODEL_NAME="text-embedding-3-small"
+EMBEDDING_MODEL_VERSION="1"
+EMBEDDING_DEPLOYMENT_CAPACITY=120
+CHAT_MODEL_NAME="gpt-4o-mini"
+CHAT_MODEL_VERSION="2024-07-18"
+CHAT_DEPLOYMENT_CAPACITY=30
+STORAGE_ACCOUNT_SKU="Standard_LRS"
+BLOB_CONTAINER_NAME="workshop-documents"
+SEARCH_INDEX_NAME="workshop-documents"
 
 # ============================================================================
 # Validate configuration
@@ -76,17 +86,19 @@ fi
 # ============================================================================
 
 echo -e "${BLUE}============================================================================${NC}"
-echo -e "${BLUE}Azure AI Search - Deployment${NC}"
+echo -e "${BLUE}Vector Database Workshop Stack - Deployment${NC}"
 echo -e "${BLUE}============================================================================${NC}"
 echo ""
 echo -e "${YELLOW}Configuration:${NC}"
-echo -e "  Resource Group:    $RESOURCE_GROUP"
-echo -e "  Location:          $LOCATION"
-echo -e "  Environment:       $ENVIRONMENT_NAME"
-echo -e "  Search SKU:        $SEARCH_SERVICE_SKU"
-echo -e "  Replicas:          $REPLICA_COUNT"
-echo -e "  Partitions:        $PARTITION_COUNT"
-echo -e "  Semantic Search:   $SEMANTIC_SEARCH"
+echo -e "  Resource Group:         $RESOURCE_GROUP"
+echo -e "  Location:               $LOCATION"
+echo -e "  Environment:            $ENVIRONMENT_NAME"
+echo -e "  Search SKU:             $SEARCH_SERVICE_SKU"
+echo -e "  Semantic Search:        $SEMANTIC_SEARCH"
+echo -e "  Embedding Model:        $EMBEDDING_MODEL_NAME"
+echo -e "  Chat Model:             $CHAT_MODEL_NAME"
+echo -e "  Storage SKU:            $STORAGE_ACCOUNT_SKU"
+echo -e "  Blob Container:         $BLOB_CONTAINER_NAME"
 echo ""
 
 # ============================================================================
@@ -136,7 +148,7 @@ echo ""
 # ============================================================================
 
 echo -e "${BLUE}============================================================================${NC}"
-echo -e "${BLUE}Deploying Azure AI Search service...${NC}"
+echo -e "${BLUE}Deploying Vector Database Workshop Stack...${NC}"
 echo -e "${BLUE}============================================================================${NC}"
 echo ""
 
@@ -154,10 +166,16 @@ az deployment group create \
         environmentName="$ENVIRONMENT_NAME" \
         location="$LOCATION" \
         searchServiceSku="$SEARCH_SERVICE_SKU" \
-        replicaCount=$REPLICA_COUNT \
-        partitionCount=$PARTITION_COUNT \
         semanticSearch="$SEMANTIC_SEARCH" \
-        publicNetworkAccess=$PUBLIC_NETWORK_ACCESS
+        embeddingModelName="$EMBEDDING_MODEL_NAME" \
+        embeddingModelVersion="$EMBEDDING_MODEL_VERSION" \
+        embeddingDeploymentCapacity=$EMBEDDING_DEPLOYMENT_CAPACITY \
+        chatModelName="$CHAT_MODEL_NAME" \
+        chatModelVersion="$CHAT_MODEL_VERSION" \
+        chatDeploymentCapacity=$CHAT_DEPLOYMENT_CAPACITY \
+        storageAccountSku="$STORAGE_ACCOUNT_SKU" \
+        blobContainerName="$BLOB_CONTAINER_NAME" \
+        searchIndexName="$SEARCH_INDEX_NAME"
 
 echo ""
 echo -e "${GREEN}✓ Deployment completed${NC}"
@@ -169,6 +187,50 @@ echo ""
 
 echo -e "${BLUE}Retrieving deployment outputs...${NC}"
 
+# AI Services (OpenAI) Outputs
+AI_SERVICES_ENDPOINT=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.aiServicesEndpoint.value" \
+    -o tsv)
+
+AI_SERVICES_API_KEY=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.aiServicesApiKey.value" \
+    -o tsv)
+
+AI_SERVICES_NAME=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.aiServicesName.value" \
+    -o tsv)
+
+EMBEDDING_DEPLOYMENT_NAME=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.embeddingDeploymentName.value" \
+    -o tsv)
+
+EMBEDDING_MODEL=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.embeddingModelName.value" \
+    -o tsv)
+
+CHAT_DEPLOYMENT_NAME=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.chatDeploymentName.value" \
+    -o tsv)
+
+CHAT_MODEL=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.chatModelName.value" \
+    -o tsv)
+
+# Azure AI Search Outputs
 SEARCH_SERVICE_NAME=$(az deployment group show \
     --name "$DEPLOYMENT_NAME" \
     --resource-group "$RESOURCE_GROUP" \
@@ -193,6 +255,50 @@ SEARCH_QUERY_KEY=$(az deployment group show \
     --query "properties.outputs.searchServiceQueryKey.value" \
     -o tsv)
 
+SEARCH_INDEX=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.searchIndexName.value" \
+    -o tsv)
+
+# Storage Account Outputs
+STORAGE_ACCOUNT_NAME=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.storageAccountName.value" \
+    -o tsv)
+
+STORAGE_BLOB_ENDPOINT=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.storageAccountBlobEndpoint.value" \
+    -o tsv)
+
+STORAGE_CONNECTION_STRING=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.storageConnectionString.value" \
+    -o tsv)
+
+BLOB_CONTAINER=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.blobContainerName.value" \
+    -o tsv)
+
+# AI Project Outputs
+AI_PROJECT_NAME=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.aiProjectName.value" \
+    -o tsv)
+
+AI_PROJECT_ENDPOINT=$(az deployment group show \
+    --name "$DEPLOYMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.outputs.aiProjectEndpoint.value" \
+    -o tsv)
+
 echo ""
 echo -e "${GREEN}✓ Outputs retrieved${NC}"
 echo ""
@@ -205,11 +311,30 @@ echo -e "${GREEN}===============================================================
 echo -e "${GREEN}Deployment completed successfully!${NC}"
 echo -e "${GREEN}============================================================================${NC}"
 echo ""
-echo -e "${YELLOW}Azure AI Search Service:${NC}"
+echo -e "${YELLOW}Azure AI Services (OpenAI):${NC}"
+echo -e "  Name:                $AI_SERVICES_NAME"
+echo -e "  Endpoint:            $AI_SERVICES_ENDPOINT"
+echo -e "  API Key:             ${AI_SERVICES_API_KEY:0:20}..."
+echo -e "  Embedding Model:     $EMBEDDING_MODEL"
+echo -e "  Embedding Deployment: $EMBEDDING_DEPLOYMENT_NAME"
+echo -e "  Chat Model:          $CHAT_MODEL"
+echo -e "  Chat Deployment:     $CHAT_DEPLOYMENT_NAME"
+echo ""
+echo -e "${YELLOW}Azure AI Search (Vector Database):${NC}"
 echo -e "  Name:       $SEARCH_SERVICE_NAME"
 echo -e "  Endpoint:   $SEARCH_ENDPOINT"
 echo -e "  Admin Key:  ${SEARCH_ADMIN_KEY:0:20}..."
 echo -e "  Query Key:  ${SEARCH_QUERY_KEY:0:20}..."
+echo -e "  Index Name: $SEARCH_INDEX"
+echo ""
+echo -e "${YELLOW}Storage Account:${NC}"
+echo -e "  Name:       $STORAGE_ACCOUNT_NAME"
+echo -e "  Endpoint:   $STORAGE_BLOB_ENDPOINT"
+echo -e "  Container:  $BLOB_CONTAINER"
+echo ""
+echo -e "${YELLOW}AI Project:${NC}"
+echo -e "  Name:       $AI_PROJECT_NAME"
+echo -e "  Endpoint:   $AI_PROJECT_ENDPOINT"
 echo ""
 
 # ============================================================================
@@ -236,10 +361,32 @@ update_env_var() {
     fi
 }
 
+# Azure OpenAI (AI Services)
+update_env_var "AZURE_OPENAI_ENDPOINT" "$AI_SERVICES_ENDPOINT"
+update_env_var "AZURE_OPENAI_API_KEY" "$AI_SERVICES_API_KEY"
+update_env_var "AZURE_OPENAI_EMBEDDING_DEPLOYMENT" "$EMBEDDING_DEPLOYMENT_NAME"
+update_env_var "AZURE_OPENAI_EMBEDDING_MODEL" "$EMBEDDING_MODEL"
+update_env_var "AZURE_OPENAI_CHAT_DEPLOYMENT" "$CHAT_DEPLOYMENT_NAME"
+update_env_var "AZURE_OPENAI_CHAT_MODEL" "$CHAT_MODEL"
+
+# Azure AI Search (Vector Database)
 update_env_var "VECTOR_DB_SERVICE_NAME" "$SEARCH_SERVICE_NAME"
 update_env_var "VECTOR_DB_ENDPOINT" "$SEARCH_ENDPOINT"
 update_env_var "VECTOR_DB_ADMIN_KEY" "$SEARCH_ADMIN_KEY"
 update_env_var "VECTOR_DB_QUERY_KEY" "$SEARCH_QUERY_KEY"
+update_env_var "VECTOR_DB_INDEX_NAME" "$SEARCH_INDEX"
+
+# Storage Account
+update_env_var "STORAGE_ACCOUNT_NAME" "$STORAGE_ACCOUNT_NAME"
+update_env_var "STORAGE_ACCOUNT_ENDPOINT" "$STORAGE_BLOB_ENDPOINT"
+update_env_var "STORAGE_CONNECTION_STRING" "$STORAGE_CONNECTION_STRING"
+update_env_var "FILE_STORAGE_CONTAINER_NAME" "$BLOB_CONTAINER"
+update_env_var "FILE_STORAGE_ENDPOINT" "$STORAGE_BLOB_ENDPOINT"
+update_env_var "FILE_STORAGE_CONNECTION_STRING" "$STORAGE_CONNECTION_STRING"
+
+# AI Project
+update_env_var "AI_PROJECT_NAME" "$AI_PROJECT_NAME"
+update_env_var "AI_PROJECT_ENDPOINT" "$AI_PROJECT_ENDPOINT"
 
 echo -e "${GREEN}✓ .env file updated${NC}"
 echo -e "${YELLOW}Backup saved to:${NC} $ENV_FILE.backup"
